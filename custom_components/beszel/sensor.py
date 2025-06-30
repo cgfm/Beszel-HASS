@@ -94,7 +94,6 @@ class BeszelSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEntity)
             "name": system_name,
             "manufacturer": "Beszel",
             "model": "Server Monitor",
-            "via_device": (DOMAIN, coordinator.entry.entry_id),
         }
 
     @property
@@ -199,7 +198,6 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
             "manufacturer": "Docker",
             "model": "Container",
             "configuration_url": None,
-            "via_device": (DOMAIN, coordinator.entry.entry_id),
         }
 
         # Set sensor attributes
@@ -222,16 +220,20 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
             return None
 
         # Extract values based on sensor type
-        if self._sensor_type == "docker_cpu":
-            return stats.get("cpu_percent")
-        elif self._sensor_type == "docker_memory":
-            return stats.get("memory_percent")
-        elif self._sensor_type == "docker_memory_bytes":
-            return stats.get("memory_usage")
-        elif self._sensor_type == "docker_network_rx":
-            return stats.get("network_rx")
-        elif self._sensor_type == "docker_network_tx":
-            return stats.get("network_tx")
+        # Try multiple possible field names for different Beszel versions
+        sensor_mappings = {
+            "docker_cpu": ["cpu_percent", "cpu", "c"],
+            "docker_memory": ["memory_percent", "memory", "m"],
+            "docker_memory_bytes": ["memory_usage", "memory_bytes", "mb"],
+            "docker_network_rx": ["network_rx", "net_rx", "rx"],
+            "docker_network_tx": ["network_tx", "net_tx", "tx"],
+        }
+
+        possible_keys = sensor_mappings.get(self._sensor_type, [])
+        for key in possible_keys:
+            value = stats.get(key)
+            if value is not None:
+                return value
 
         return None
 

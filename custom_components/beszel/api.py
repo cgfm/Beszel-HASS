@@ -179,44 +179,66 @@ class BeszelAPIClient:
             if not await self.authenticate():
                 raise BeszelAPIError("Authentication failed")
 
-        try:
-            headers = {"Authorization": f"Bearer {self._auth_token}"}
-            async with self._session.get(
-                f"{self._base_url}/api/collections/docker/records",
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as response:
-                if response.status == 401:
-                    # Token might be expired, try to re-authenticate
-                    if await self.authenticate():
-                        headers = {"Authorization": f"Bearer {self._auth_token}"}
-                        async with self._session.get(
-                            f"{self._base_url}/api/collections/docker/records",
-                            headers=headers,
-                            timeout=aiohttp.ClientTimeout(total=10),
-                        ) as retry_response:
-                            if retry_response.status == 200:
-                                data = await retry_response.json()
-                                return data.get("items", [])
-                    raise BeszelAPIError("Authentication failed")
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("items", [])
+        # Try different possible collection names for container data
+        collection_names = ["container_stats", "containers", "docker", "docker_stats"]
 
-                # If docker collection doesn't exist, return empty list
-                if response.status == 404:
+        for collection_name in collection_names:
+            try:
+                headers = {"Authorization": f"Bearer {self._auth_token}"}
+                async with self._session.get(
+                    f"{self._base_url}/api/collections/{collection_name}/records",
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as response:
+                    if response.status == 401:
+                        # Token might be expired, try to re-authenticate
+                        if await self.authenticate():
+                            headers = {"Authorization": f"Bearer {self._auth_token}"}
+                            async with self._session.get(
+                                f"{self._base_url}/api/collections/{collection_name}/records",
+                                headers=headers,
+                                timeout=aiohttp.ClientTimeout(total=10),
+                            ) as retry_response:
+                                if retry_response.status == 200:
+                                    data = await retry_response.json()
+                                    _LOGGER.debug(
+                                        "Found containers in '%s': %d items",
+                                        collection_name,
+                                        len(data.get("items", [])),
+                                    )
+                                    return data.get("items", [])
+                        raise BeszelAPIError("Authentication failed")
+                    if response.status == 200:
+                        data = await response.json()
+                        _LOGGER.debug(
+                            "Found containers in '%s': %d items",
+                            collection_name,
+                            len(data.get("items", [])),
+                        )
+                        return data.get("items", [])
+                    if response.status == 404:
+                        _LOGGER.debug(
+                            "Collection '%s' not found, trying next...", collection_name
+                        )
+                        continue
                     _LOGGER.debug(
-                        "Docker collection not found - no containers available"
+                        "Collection '%s' returned status %s",
+                        collection_name,
+                        response.status,
                     )
-                    return []
+                    continue
 
-                raise BeszelAPIError(
-                    f"API request failed with status {response.status}"
+            except aiohttp.ClientError as err:
+                _LOGGER.debug(
+                    "Error accessing collection '%s': %s", collection_name, err
                 )
+                continue
 
-        except aiohttp.ClientError as err:
-            _LOGGER.error("Error getting docker containers: %s", err)
-            raise BeszelAPIError(f"Network error: {err}") from err
+        # If we get here, no collection was found
+        _LOGGER.debug(
+            "No Docker container collections found - tried: %s", collection_names
+        )
+        return []
 
     async def get_docker_stats(self, container_id: str) -> dict[str, Any]:
         """Get stats for a specific Docker container from PocketBase."""
@@ -253,6 +275,71 @@ class BeszelAPIClient:
 
         except aiohttp.ClientError as err:
             _LOGGER.error("Error getting docker stats for %s: %s", container_id, err)
+            raise BeszelAPIError(f"Network error: {err}") from err
+
+    async def debug_list_collections(self) -> list[dict[str, Any]]:
+        """Debug method to list all available collections in PocketBase."""
+        if not self._auth_token:
+            if not await self.authenticate():
+                raise BeszelAPIError("Authentication failed")
+
+        try:
+            headers = {"Authorization": f"Bearer {self._auth_token}"}
+
+            # Try to list collections via admin API
+            async with self._session.get(
+                f"{self._base_url}/api/collections",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    _LOGGER.debug(
+                        "Available collections: %s", [col.get("name") for col in data]
+                    )
+                    return data
+                _LOGGER.debug("Could not list collections, status: %s", response.status)
+
+            # Alternative: try some common collection names
+            common_collections = [
+                "container_stats",
+                "containers",
+                "docker_stats",
+                "docker_containers",
+            ]
+            found_collections = []
+
+            for collection_name in common_collections:
+                try:
+                    async with self._session.get(
+                        f"{self._base_url}/api/collections/{collection_name}/records",
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=5),
+                    ) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            found_collections.append(
+                                {
+                                    "name": collection_name,
+                                    "count": len(data.get("items", [])),
+                                }
+                            )
+                            _LOGGER.debug(
+                                "Found collection '%s' with %d items",
+                                collection_name,
+                                len(data.get("items", [])),
+                            )
+                        elif response.status == 404:
+                            _LOGGER.debug("Collection '%s' not found", collection_name)
+                except Exception as exc:
+                    _LOGGER.debug(
+                        "Error checking collection '%s': %s", collection_name, exc
+                    )
+
+            return found_collections
+
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error listing collections: %s", err)
             raise BeszelAPIError(f"Network error: {err}") from err
 
 

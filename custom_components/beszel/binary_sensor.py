@@ -87,7 +87,6 @@ class BeszelBinarySensor(
             "name": system_name,
             "manufacturer": "Beszel",
             "model": "Server Monitor",
-            "via_device": (DOMAIN, coordinator.entry.entry_id),
         }
 
     @property
@@ -174,7 +173,6 @@ class BeszelDockerBinarySensor(
             "manufacturer": "Docker",
             "model": "Container",
             "configuration_url": None,
-            "via_device": (DOMAIN, coordinator.entry.entry_id),
         }
 
         # Set binary sensor attributes

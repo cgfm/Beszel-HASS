@@ -33,7 +33,7 @@ def async_remove_stale_entities(
 
 
 @callback
-def async_get_device_info(system_id: str, system_info: dict, entry_id: str) -> dict:
+def async_get_device_info(system_id: str, system_info: dict) -> dict:
     """Get device information for a system."""
     return {
         "identifiers": {(DOMAIN, system_id)},
@@ -42,5 +42,4 @@ def async_get_device_info(system_id: str, system_info: dict, entry_id: str) -> d
         "model": "Server Monitor",
         "sw_version": system_info.get("version"),
         "configuration_url": None,  # Could be set to Beszel web interface
-        "via_device": (DOMAIN, entry_id),
     }
