@@ -1,0 +1,20 @@
+Beszel Home Assistant Integration - Installation Instructions
+
+HACS Installation:
+1. Open HACS in Home Assistant
+2. Go to Integrations
+3. Click the three dots menu -> Custom repositories
+4. Add this repository URL: https://github.com/cgfm/beszel-hass
+5. Select "Integration" as category
+6. Search for "Beszel" and install
+7. Restart Home Assistant
+
+Manual Installation:
+1. Extract this ZIP file
+2. Copy the "custom_components/beszel" folder to your Home Assistant 
+   config/custom_components/ directory
+3. Restart Home Assistant
+4. Go to Settings > Devices & Services > Add Integration
+5. Search for "Beszel" and configure
+
+For detailed instructions, see INSTALL.md

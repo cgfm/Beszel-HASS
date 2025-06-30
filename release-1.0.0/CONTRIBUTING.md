@@ -31,7 +31,7 @@ Thank you for your interest in contributing to this integration!
 This project uses several tools to maintain code quality:
 
 - **[Black](https://black.readthedocs.io/)** for code formatting
-- **[isort](https://pycqa.github.io/isort/)** for import sorting
+- **[isort](https://pycqa.github.io/isort/)** for import sorting  
 - **[Pylint](https://pylint.org/)** for code analysis
 - **[mypy](https://mypy.readthedocs.io/)** for type checking
 

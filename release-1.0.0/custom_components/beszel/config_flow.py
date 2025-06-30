@@ -93,8 +93,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     except asyncio.TimeoutError as err:
         _LOGGER.error("Timeout connecting to %s: %s", base_url, err)
         raise CannotConnect from err
-    except InvalidAuth as err:
-        _LOGGER.error("Authentication failed: %s", err)
+    except InvalidAuth:
         raise
     except Exception as err:
         _LOGGER.error("Unexpected error connecting to Beszel: %s", err)

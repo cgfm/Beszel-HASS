@@ -78,3 +78,9 @@ home-assistant_v2.db
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Project specific
+release-*/
+*.zip
+.pre-commit-cache/
+beszel-hass-*.zip

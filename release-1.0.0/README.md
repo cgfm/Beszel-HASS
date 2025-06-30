@@ -26,7 +26,7 @@ A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a
 
 ### Sensors
 - **CPU Usage** (%) - Current CPU utilization
-- **Memory Usage** (%) - Current RAM utilization
+- **Memory Usage** (%) - Current RAM utilization  
 - **Disk Usage** (%) - Current disk space utilization
 - **Bandwidth Up** (MB/s) - Network upload speed
 - **Bandwidth Down** (MB/s) - Network download speed

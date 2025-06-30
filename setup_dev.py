@@ -50,8 +50,18 @@ def main():
     print("\nNext steps:")
     print("1. Update the manifest.json with your GitHub username")
     print("2. Update the README.md with your repository URLs")
-    print("3. Create a GitHub repository and push the code")
-    print("4. Test the integration in a Home Assistant development environment")
+    print("3. Add repository description and topics on GitHub:")
+    print("   - Description: 'Home Assistant integration for Beszel server monitoring'")
+    print("   - Topics: 'home-assistant', 'hacs', 'beszel', 'monitoring', 'python'")
+    print("4. Create a GitHub repository and push the code")
+    print("5. Test the integration in a Home Assistant development environment")
+    print("\nTo test the API connection manually:")
+    print("curl -X POST 'http://your-beszel-host:port/api/auth/login' \\")
+    print("  -H 'Content-Type: application/json' \\")
+    print("  -d '{\"username\": \"your-username\", \"password\": \"your-password\"}'")
+    print("\nIf that fails, try alternative endpoints:")
+    print("- /api/login")
+    print("- Check your Beszel documentation for the correct API endpoints")
 
 
 if __name__ == "__main__":
