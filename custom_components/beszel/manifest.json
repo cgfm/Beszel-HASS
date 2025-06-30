@@ -1,0 +1,13 @@
+{
+  "domain": "beszel",
+  "name": "Beszel",
+  "codeowners": ["@cgfm"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/cgfm/beszel-hass",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/cgfm/beszel-hass/issues",
+  "requirements": ["aiohttp>=3.8.0"],
+  "version": "1.0.0"
+}

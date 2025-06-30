@@ -1,0 +1,7 @@
+{
+  "name": "Beszel Integration",
+  "hacs": "1.32.0",
+  "domains": ["beszel"],
+  "homeassistant": "2023.1.0",
+  "iot_class": "Cloud Polling"
+}
