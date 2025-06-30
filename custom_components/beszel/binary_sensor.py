@@ -30,17 +30,31 @@ async def async_setup_entry(
     # Create binary sensors for each system
     for system_data in coordinator.data.values():
         if "system_info" in system_data:
+            data_type = system_data.get("type", "system")
             system_info = system_data["system_info"]
             system_id = system_info.get("id")
-            system_name = system_info.get("name", f"System {system_id}")
 
-            entities.append(
-                BeszelBinarySensor(
-                    coordinator=coordinator,
-                    system_id=system_id,
-                    system_name=system_name,
+            if data_type == "docker":
+                # Handle Docker containers
+                if coordinator.is_docker_enabled():
+                    container_name = system_info.get("name", f"Container {system_id}")
+                    entities.append(
+                        BeszelDockerBinarySensor(
+                            coordinator=coordinator,
+                            container_id=system_id,
+                            container_name=container_name,
+                        )
+                    )
+            else:
+                # Handle regular systems
+                system_name = system_info.get("name", f"System {system_id}")
+                entities.append(
+                    BeszelBinarySensor(
+                        coordinator=coordinator,
+                        system_id=system_id,
+                        system_name=system_name,
+                    )
                 )
-            )
 
     async_add_entities(entities)
 
@@ -128,3 +142,79 @@ class BeszelBinarySensor(
                 attributes["last_update"] = stats["timestamp"]
 
         return attributes if attributes else None
+
+
+class BeszelDockerBinarySensor(
+    CoordinatorEntity[BeszelDataUpdateCoordinator], BinarySensorEntity
+):
+    """Representation of a Beszel Docker container status sensor."""
+
+    def __init__(
+        self,
+        coordinator: BeszelDataUpdateCoordinator,
+        container_id: str,
+        container_name: str,
+    ) -> None:
+        """Initialize the binary sensor."""
+        super().__init__(coordinator)
+
+        self._container_id = container_id
+        self._container_name = container_name
+
+        # Create unique ID
+        self._attr_unique_id = f"docker_{container_id}_status"
+
+        # Set entity name
+        self._attr_name = f"Docker {container_name} Status"
+
+        # Set device info (same as sensors)
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, f"docker_{container_id}")},
+            "name": f"Docker: {container_name}",
+            "manufacturer": "Docker",
+            "model": "Container",
+            "configuration_url": None,
+            "via_device": (DOMAIN, coordinator.entry.entry_id),
+        }
+
+        # Set binary sensor attributes
+        self._attr_device_class = BinarySensorDeviceClass.RUNNING
+        self._attr_icon = "mdi:docker"
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if the container is running."""
+        container_data = self.coordinator.get_docker_data(self._container_id)
+        if not container_data:
+            return False
+
+        container_info = container_data.get("system_info", {})
+        status = container_info.get("status", "").lower()
+
+        # Container is "on" (running) if status indicates it's running
+        return status in ["running", "up"]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        container_data = self.coordinator.get_docker_data(self._container_id)
+        if not container_data:
+            return {}
+
+        container_info = container_data.get("system_info", {})
+
+        return {
+            "container_id": self._container_id,
+            "container_name": container_info.get("name"),
+            "image": container_info.get("image"),
+            "status": container_info.get("status"),
+            "created": container_info.get("created"),
+            "updated": container_info.get("updated"),
+            "ports": container_info.get("ports"),
+            "labels": container_info.get("labels"),
+        }
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        return self.coordinator.get_docker_data(self._container_id) is not None

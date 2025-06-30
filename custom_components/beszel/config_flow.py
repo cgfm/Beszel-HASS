@@ -15,7 +15,14 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
-from .const import CONF_SSL, DEFAULT_PORT, DEFAULT_SSL, DOMAIN
+from .const import (
+    CONF_INCLUDE_DOCKER,
+    CONF_SSL,
+    DEFAULT_INCLUDE_DOCKER,
+    DEFAULT_PORT,
+    DEFAULT_SSL,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +33,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Optional(CONF_SSL, default=DEFAULT_SSL): bool,
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
+        vol.Optional(CONF_INCLUDE_DOCKER, default=DEFAULT_INCLUDE_DOCKER): bool,
     }
 )
 

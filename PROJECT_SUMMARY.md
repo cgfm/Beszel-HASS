@@ -8,7 +8,7 @@ Die Beszel Home Assistant Integration wurde erfolgreich entwickelt und ist berei
 
 ### ✅ Vollständige HACS-kompatible Integration
 - **Domain**: `beszel`
-- **Version**: 1.0.0  
+- **Version**: 1.0.0
 - **Home Assistant**: 2023.1.0+ kompatibel
 - **Authentifizierung**: PocketBase API mit users/auth-with-password
 - **Auto-Discovery**: Automatische Erkennung aller überwachten Systeme
@@ -22,7 +22,7 @@ Die Beszel Home Assistant Integration wurde erfolgreich entwickelt und ist berei
 
 ### ✅ Unterstützte Sensoren
 - **CPU Usage** (%) - `info.cpu`
-- **Memory Usage** (%) - `info.mp` 
+- **Memory Usage** (%) - `info.mp`
 - **Disk Usage** (%) - `info.dp`
 - **Network Up** (MB/s) - `info.u`
 - **Network Down** (MB/s) - `info.b`
@@ -75,7 +75,7 @@ custom_components/beszel/
 
 ### Dokumentation
 - **README.md**: Hauptdokumentation
-- **INSTALL.md**: Installationsanleitung  
+- **INSTALL.md**: Installationsanleitung
 - **CONTRIBUTING.md**: Entwicklerrichtlinien
 - **LICENSE**: MIT Lizenz
 
@@ -97,7 +97,7 @@ custom_components/beszel/
 ### 2. URLs aktualisieren
 Aktualisiere folgende Dateien mit der echten GitHub URL:
 - `custom_components/beszel/manifest.json`
-- `README.md` 
+- `README.md`
 - `INSTALL.md`
 - `CONTRIBUTING.md`
 
@@ -140,14 +140,14 @@ Suche nach `cgfm` und ersetze mit dem echten GitHub Username.
 ```json
 {
   "id": "system_id",
-  "name": "System Name", 
+  "name": "System Name",
   "status": "up|down",
   "info": {
     "cpu": 25.5,    // CPU usage %
     "mp": 60.2,     // Memory usage %
     "dp": 45.8,     // Disk usage %
     "u": 1.2,       // Upload MB/s
-    "b": 3.4,       // Download MB/s  
+    "b": 3.4,       // Download MB/s
     "dt": 3600      // Uptime seconds
   }
 }
@@ -195,11 +195,11 @@ Für zukünftige Versionen könnten folgende Features hinzugefügt werden:
 
 ## 🏆 Fazit
 
-Die Beszel Home Assistant Integration ist vollständig entwickelt und produktionsreif! 
+Die Beszel Home Assistant Integration ist vollständig entwickelt und produktionsreif!
 
 **Key Achievements:**
 - ✅ Vollständige Home Assistant Integration mit Config Flow
-- ✅ Robuste PocketBase API-Integration  
+- ✅ Robuste PocketBase API-Integration
 - ✅ HACS-kompatibel und bereit für Community-Distribution
 - ✅ Hochwertige Dokumentation und Entwicklertools
 - ✅ Production-ready Code mit Error Handling
@@ -207,5 +207,5 @@ Die Beszel Home Assistant Integration ist vollständig entwickelt und produktion
 Die Integration kann jetzt in echten Home Assistant Umgebungen getestet und über HACS an die Community verteilt werden!
 
 ---
-*Projekt erstellt: Juni 2025*  
+*Projekt erstellt: Juni 2025*
 *Status: Abgeschlossen und bereit für Deployment* 🚀

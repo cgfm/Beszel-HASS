@@ -88,6 +88,7 @@ Fill in the following details:
 | **Username** | Beszel username | `admin` | ✅ |
 | **Password** | Beszel password | `your_password` | ✅ |
 | **Use SSL** | Enable HTTPS connection | ☑️ if using HTTPS | ❌ |
+| **Monitor Docker Containers** | Enable Docker container monitoring | ☑️ to monitor containers | ❌ |
 
 ### Example Configurations
 
@@ -126,6 +127,7 @@ If successful, you'll see:
 2. You should see:
    - Integration listed as configured
    - One device per monitored system
+   - Additional devices for Docker containers (if enabled)
    - Multiple entities per device (CPU, Memory, Disk, etc.)
 
 ### View Entities
@@ -133,6 +135,27 @@ If successful, you'll see:
 1. Navigate to **Settings** > **Devices & Services** > **Entities**
 2. Filter by "beszel" to see all entities
 3. Or go to **Developer Tools** > **States** and search for `sensor.beszel_`
+
+### Entity Types
+
+The integration creates the following entity types:
+
+#### System Entities (Always Present)
+- `sensor.{system_name}_cpu_usage` - CPU usage percentage
+- `sensor.{system_name}_memory_usage` - Memory usage percentage
+- `sensor.{system_name}_disk_usage` - Disk usage percentage
+- `sensor.{system_name}_network_up` - Network upload speed
+- `sensor.{system_name}_network_down` - Network download speed
+- `sensor.{system_name}_uptime` - System uptime
+- `binary_sensor.{system_name}_status` - System online/offline status
+
+#### Docker Entities (When Docker Monitoring Enabled)
+- `sensor.docker_{container_name}_cpu_usage` - Container CPU usage percentage
+- `sensor.docker_{container_name}_memory_usage` - Container memory usage percentage
+- `sensor.docker_{container_name}_memory_bytes` - Container memory usage in bytes
+- `sensor.docker_{container_name}_network_rx` - Container network received bytes
+- `sensor.docker_{container_name}_network_tx` - Container network transmitted bytes
+- `binary_sensor.docker_{container_name}_status` - Container running/stopped status
 
 ### Dashboard Integration
 
@@ -144,6 +167,7 @@ Add Beszel entities to your dashboard:
    - **Gauge Card** for CPU/Memory/Disk usage
    - **History Graph** for usage over time
    - **Entity Card** for system status
+   - **Glance Card** for Docker container overview (if enabled)
 
 ## Troubleshooting
 

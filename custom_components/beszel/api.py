@@ -173,6 +173,88 @@ class BeszelAPIClient:
                 "error": str(err),
             }
 
+    async def get_docker_containers(self) -> list[dict[str, Any]]:
+        """Get list of Docker containers from PocketBase."""
+        if not self._auth_token:
+            if not await self.authenticate():
+                raise BeszelAPIError("Authentication failed")
+
+        try:
+            headers = {"Authorization": f"Bearer {self._auth_token}"}
+            async with self._session.get(
+                f"{self._base_url}/api/collections/docker/records",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 401:
+                    # Token might be expired, try to re-authenticate
+                    if await self.authenticate():
+                        headers = {"Authorization": f"Bearer {self._auth_token}"}
+                        async with self._session.get(
+                            f"{self._base_url}/api/collections/docker/records",
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as retry_response:
+                            if retry_response.status == 200:
+                                data = await retry_response.json()
+                                return data.get("items", [])
+                    raise BeszelAPIError("Authentication failed")
+                if response.status == 200:
+                    data = await response.json()
+                    return data.get("items", [])
+
+                # If docker collection doesn't exist, return empty list
+                if response.status == 404:
+                    _LOGGER.debug(
+                        "Docker collection not found - no containers available"
+                    )
+                    return []
+
+                raise BeszelAPIError(
+                    f"API request failed with status {response.status}"
+                )
+
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error getting docker containers: %s", err)
+            raise BeszelAPIError(f"Network error: {err}") from err
+
+    async def get_docker_stats(self, container_id: str) -> dict[str, Any]:
+        """Get stats for a specific Docker container from PocketBase."""
+        if not self._auth_token:
+            if not await self.authenticate():
+                raise BeszelAPIError("Authentication failed")
+
+        try:
+            headers = {"Authorization": f"Bearer {self._auth_token}"}
+            # Get the container record which should contain current stats
+            url = f"{self._base_url}/api/collections/docker/records/{container_id}"
+
+            async with self._session.get(
+                url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+            ) as response:
+                if response.status == 401:
+                    # Token might be expired, try to re-authenticate
+                    if await self.authenticate():
+                        headers = {"Authorization": f"Bearer {self._auth_token}"}
+                        async with self._session.get(
+                            url,
+                            headers=headers,
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as retry_response:
+                            if retry_response.status == 200:
+                                return await retry_response.json()
+                    raise BeszelAPIError("Authentication failed")
+                if response.status == 200:
+                    return await response.json()
+
+                raise BeszelAPIError(
+                    f"API request failed with status {response.status}"
+                )
+
+        except aiohttp.ClientError as err:
+            _LOGGER.error("Error getting docker stats for %s: %s", container_id, err)
+            raise BeszelAPIError(f"Network error: {err}") from err
+
 
 class BeszelAPIError(Exception):
     """Exception for Beszel API errors."""

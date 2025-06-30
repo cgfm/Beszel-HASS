@@ -8,18 +8,20 @@ from typing import Any, Dict
 import requests
 
 
-def test_beszel_connection(host: str, port: int, username: str, password: str, use_ssl: bool = False):
+def test_beszel_connection(
+    host: str, port: int, username: str, password: str, use_ssl: bool = False
+):
     """Test connection to Beszel API."""
     scheme = "https" if use_ssl else "http"
     base_url = f"{scheme}://{host}:{port}"
-    
+
     print(f"Testing connection to: {base_url}")
     print("=" * 50)
-    
+
     # Configure session
     session = requests.Session()
     session.timeout = 10
-    
+
     # Test 1: Basic connectivity
     print("\n1. Testing basic connectivity...")
     try:
@@ -34,10 +36,10 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
     except Exception as e:
         print(f"   ❌ Connection failed: {e}")
         return
-    
+
     # Test 2: API endpoints discovery
     print("\n2. Testing API endpoints...")
-    
+
     endpoints_to_test = [
         "/api",
         "/api/ping",
@@ -50,7 +52,7 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
         "/api/server",
         "/api/servers",
     ]
-    
+
     for endpoint in endpoints_to_test:
         try:
             response = session.get(f"{base_url}{endpoint}", timeout=5)
@@ -63,25 +65,22 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
                     print(f"      Response (text): {response.text[:100]}...")
         except Exception as e:
             print(f"   {endpoint}: ERROR - {str(e)[:50]}...")
-    
+
     # Test 3: Authentication
     print("\n3. Testing authentication...")
-    auth_data = {
-        "username": username,
-        "password": password
-    }
-    
+    auth_data = {"username": username, "password": password}
+
     # Try different authentication formats
     auth_formats = [
         ("JSON", auth_data),
         ("email/password", {"email": username, "password": password}),
         ("user/pass", {"user": username, "pass": password}),
     ]
-    
+
     auth_endpoints = ["/api/auth/login", "/api/login", "/api/auth", "/login"]
     auth_success = False
     token = None
-    
+
     for endpoint in auth_endpoints:
         print(f"\n   Trying endpoint: {endpoint}")
         for format_name, data in auth_formats:
@@ -91,14 +90,18 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
                     f"{base_url}{endpoint}",
                     json=data,
                     headers={"Content-Type": "application/json"},
-                    timeout=10
+                    timeout=10,
                 )
                 print(f"     Status: {response.status_code}")
                 if response.status_code == 200:
                     try:
                         result = response.json()
                         print(f"     Response: {json.dumps(result, indent=8)}")
-                        token = result.get("token") or result.get("access_token") or result.get("jwt")
+                        token = (
+                            result.get("token")
+                            or result.get("access_token")
+                            or result.get("jwt")
+                        )
                         if token:
                             print(f"     ✅ Authentication successful, token received")
                             auth_success = True
@@ -125,21 +128,19 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
                     print(f"     Response: {response.text[:200]}...")
             except Exception as e:
                 print(f"     ❌ Error: {e}")
-        
+
         if auth_success:
             break
-    
+
     if not auth_success:
         print("\n❌ Authentication failed with all endpoints and formats")
         print("\nTrying alternative approaches...")
-        
+
         # Try basic auth
         try:
             print("\n   Trying HTTP Basic Auth...")
             response = session.get(
-                f"{base_url}/api/systems",
-                auth=(username, password),
-                timeout=10
+                f"{base_url}/api/systems", auth=(username, password), timeout=10
             )
             print(f"   Status: {response.status_code}")
             if response.status_code == 200:
@@ -152,29 +153,27 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
                 return
         except Exception as e:
             print(f"   ❌ Basic Auth failed: {e}")
-        
+
         return
-    
+
     # Test 4: Get systems/nodes
     print("\n4. Testing systems/nodes endpoints...")
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    
+
     systems_endpoints = ["/api/systems", "/api/nodes", "/api/servers", "/api/hosts"]
-    
+
     for endpoint in systems_endpoints:
         try:
             print(f"   Trying {endpoint}...")
-            response = session.get(
-                f"{base_url}{endpoint}",
-                headers=headers,
-                timeout=10
-            )
+            response = session.get(f"{base_url}{endpoint}", headers=headers, timeout=10)
             print(f"   Status: {response.status_code}")
             if response.status_code == 200:
                 try:
                     result = response.json()
                     print(f"   Response: {json.dumps(result, indent=4)}")
-                    print(f"   ✅ Found {len(result) if isinstance(result, list) else 'unknown number of'} systems")
+                    print(
+                        f"   ✅ Found {len(result) if isinstance(result, list) else 'unknown number of'} systems"
+                    )
                     break
                 except Exception as e:
                     print(f"   ⚠️  Could not parse JSON response: {e}")
@@ -186,7 +185,7 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
                 print(f"   Response: {response.text[:200]}...")
         except Exception as e:
             print(f"   ❌ Error: {e}")
-    
+
     print("\n" + "=" * 50)
     print("Test completed!")
 
@@ -194,16 +193,20 @@ def test_beszel_connection(host: str, port: int, username: str, password: str, u
 def main():
     """Main function."""
     if len(sys.argv) < 5:
-        print("Usage: python debug_beszel_simple.py <host> <port> <username> <password> [use_ssl]")
-        print("Example: python debug_beszel_simple.py localhost 8090 admin password false")
+        print(
+            "Usage: python debug_beszel_simple.py <host> <port> <username> <password> [use_ssl]"
+        )
+        print(
+            "Example: python debug_beszel_simple.py localhost 8090 admin password false"
+        )
         sys.exit(1)
-    
+
     host = sys.argv[1]
     port = int(sys.argv[2])
     username = sys.argv[3]
     password = sys.argv[4]
-    use_ssl = len(sys.argv) > 5 and sys.argv[5].lower() in ['true', '1', 'yes']
-    
+    use_ssl = len(sys.argv) > 5 and sys.argv[5].lower() in ["true", "1", "yes"]
+
     test_beszel_connection(host, port, username, password, use_ssl)
 
 

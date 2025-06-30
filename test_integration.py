@@ -3,13 +3,13 @@
 
 import asyncio
 import logging
-import sys
 from pathlib import Path
+import sys
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from homeassistant.core import HomeAssistant
 
 # Add the custom component to the path
 sys.path.insert(0, str(Path(__file__).parent / "custom_components"))
@@ -38,13 +38,15 @@ class MockConfigEntry:
         self.entry_id = "test_entry"
 
 
-async def test_api_client(host: str, port: int, username: str, password: str, use_ssl: bool = False):
+async def test_api_client(
+    host: str, port: int, username: str, password: str, use_ssl: bool = False
+):
     """Test the API client."""
     print(f"Testing Beszel API Client...")
     print("=" * 50)
 
     mock_hass = MockHomeAssistant()
-    
+
     client = BeszelAPIClient(
         hass=mock_hass,
         host=host,
@@ -68,7 +70,7 @@ async def test_api_client(host: str, port: int, username: str, password: str, us
         print("\n2. Testing system retrieval...")
         systems = await client.get_systems()
         print(f"✅ Found {len(systems)} systems")
-        
+
         if systems:
             print("\nSystem details:")
             for i, system in enumerate(systems[:3]):  # Show first 3 systems
@@ -76,14 +78,14 @@ async def test_api_client(host: str, port: int, username: str, password: str, us
                 print(f"    ID: {system.get('id', 'N/A')}")
                 print(f"    Name: {system.get('name', 'N/A')}")
                 print(f"    Status: {system.get('status', 'N/A')}")
-                
+
                 # Test getting stats for this system
-                system_id = system.get('id')
+                system_id = system.get("id")
                 if system_id:
                     try:
                         print(f"\n3. Testing stats for system {system_id}...")
                         stats = await client.get_system_stats(system_id)
-                        info = stats.get('info', {})
+                        info = stats.get("info", {})
                         print(f"    CPU: {info.get('cpu', 'N/A')}%")
                         print(f"    Memory: {info.get('mp', 'N/A')}%")
                         print(f"    Disk: {info.get('dp', 'N/A')}%")
@@ -94,7 +96,7 @@ async def test_api_client(host: str, port: int, username: str, password: str, us
         print("\n4. Testing bulk stats retrieval...")
         all_stats = await client.get_all_stats()
         print(f"✅ Retrieved stats for {len(all_stats)} systems")
-        
+
         return True
 
     except Exception as e:
@@ -102,16 +104,18 @@ async def test_api_client(host: str, port: int, username: str, password: str, us
         return False
 
 
-async def test_config_flow(host: str, port: int, username: str, password: str, use_ssl: bool = False):
+async def test_config_flow(
+    host: str, port: int, username: str, password: str, use_ssl: bool = False
+):
     """Test the config flow."""
     print(f"\n\nTesting Config Flow...")
     print("=" * 50)
-    
+
     try:
         from beszel.config_flow import validate_input  # noqa: E402
-        
+
         mock_hass = MockHomeAssistant()
-        
+
         user_input = {
             CONF_HOST: host,
             CONF_PORT: port,
@@ -119,14 +123,14 @@ async def test_config_flow(host: str, port: int, username: str, password: str, u
             CONF_PASSWORD: password,
             CONF_SSL: use_ssl,
         }
-        
+
         print("Testing user input validation...")
         result = await validate_input(mock_hass, user_input)
-        
+
         print(f"✅ Config validation successful!")
         print(f"    Title: {result.get('title', 'N/A')}")
         return True
-        
+
     except Exception as e:
         print(f"❌ Config flow error: {e}")
         return False
@@ -136,7 +140,8 @@ def print_installation_instructions():
     """Print installation instructions for Home Assistant."""
     print("\n\nHome Assistant Installation Instructions:")
     print("=" * 60)
-    print("""
+    print(
+        """
 To test this integration in Home Assistant:
 
 1. Copy the integration to your Home Assistant:
@@ -160,13 +165,16 @@ To test this integration in Home Assistant:
    - Install the integration
    - Restart Home Assistant
    - Add the integration as above
-""")
+"""
+    )
 
 
 async def main():
     """Main function."""
     if len(sys.argv) < 5:
-        print("Usage: python test_integration.py <host> <port> <username> <password> [use_ssl]")
+        print(
+            "Usage: python test_integration.py <host> <port> <username> <password> [use_ssl]"
+        )
         print("Example: python test_integration.py localhost 8090 admin password false")
         sys.exit(1)
 
@@ -174,7 +182,7 @@ async def main():
     port = int(sys.argv[2])
     username = sys.argv[3]
     password = sys.argv[4]
-    use_ssl = len(sys.argv) > 5 and sys.argv[5].lower() in ['true', '1', 'yes']
+    use_ssl = len(sys.argv) > 5 and sys.argv[5].lower() in ["true", "1", "yes"]
 
     print("Beszel Home Assistant Integration Test")
     print("=" * 50)
@@ -184,15 +192,15 @@ async def main():
 
     # Test API client
     api_success = await test_api_client(host, port, username, password, use_ssl)
-    
+
     # Test config flow
     config_success = await test_config_flow(host, port, username, password, use_ssl)
-    
+
     print("\n\nTest Summary:")
     print("=" * 30)
     print(f"API Client: {'✅ PASS' if api_success else '❌ FAIL'}")
     print(f"Config Flow: {'✅ PASS' if config_success else '❌ FAIL'}")
-    
+
     if api_success and config_success:
         print("\n🎉 All tests passed! Integration is ready for Home Assistant.")
         print_installation_instructions()

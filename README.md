@@ -15,7 +15,8 @@ A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a
 ## Features
 
 - 🖥️ **Server Monitoring**: Monitor CPU, RAM, disk usage and network stats
-- 🔄 **Auto Discovery**: Automatically discovers all monitored servers from your Beszel instance
+- � **Docker Container Monitoring**: Optional monitoring of Docker containers (NEW!)
+- �🔄 **Auto Discovery**: Automatically discovers all monitored servers from your Beszel instance
 - ⚙️ **Easy Setup**: Configure through Home Assistant UI with config flow
 - 🏠 **Native Integration**: Full Home Assistant integration with devices and entities
 - 📊 **Real-time Data**: Live updates of system metrics
@@ -24,7 +25,7 @@ A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a
 
 ## Supported Entities
 
-### Sensors
+### System Sensors
 - **CPU Usage** (%) - Current CPU utilization
 - **Memory Usage** (%) - Current RAM utilization
 - **Disk Usage** (%) - Current disk space utilization
@@ -32,10 +33,19 @@ A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a
 - **Bandwidth Down** (MB/s) - Network download speed
 - **Uptime** - System uptime in seconds
 
+### Docker Container Sensors (Optional)
+When Docker monitoring is enabled:
+- **Docker CPU Usage** (%) - Container CPU utilization
+- **Docker Memory Usage** (%) - Container memory utilization
+- **Docker Memory Usage** (bytes) - Container memory usage in bytes
+- **Docker Network RX** (bytes) - Container network received bytes
+- **Docker Network TX** (bytes) - Container network transmitted bytes
+
 ### Binary Sensors
 - **System Status** - Online/Offline status of monitored systems
+- **Docker Container Status** - Running/Stopped status of Docker containers (when enabled)
 
-Each monitored system appears as a separate device in Home Assistant with all its metrics grouped together.
+Each monitored system and Docker container appears as a separate device in Home Assistant with all its metrics grouped together.
 
 ## Installation
 
@@ -67,6 +77,7 @@ Each monitored system appears as a separate device in Home Assistant with all it
    - **Username**: Your Beszel username
    - **Password**: Your Beszel password
    - **Use SSL**: Enable if using HTTPS
+   - **Monitor Docker Containers**: Enable to monitor Docker containers (optional)
 
 ## Requirements
 

@@ -10,10 +10,12 @@ CONF_PORT: Final = "port"
 CONF_USERNAME: Final = "username"
 CONF_PASSWORD: Final = "password"
 CONF_SSL: Final = "use_ssl"
+CONF_INCLUDE_DOCKER: Final = "include_docker"
 
 # Defaults
 DEFAULT_PORT: Final = 8090
 DEFAULT_SSL: Final = False
+DEFAULT_INCLUDE_DOCKER: Final = True
 DEFAULT_SCAN_INTERVAL: Final = 30
 
 # API endpoints
@@ -63,5 +65,44 @@ SENSOR_TYPES = {
         "icon": "mdi:chart-line",
         "device_class": "data_size",
         "info_key": "b",  # maps to info.b (bandwidth)
+    },
+}
+
+# Docker container sensor types
+DOCKER_SENSOR_TYPES = {
+    "docker_cpu": {
+        "name": "CPU Usage",
+        "unit": "%",
+        "icon": "mdi:docker",
+        "device_class": None,
+        "state_class": "measurement",
+    },
+    "docker_memory": {
+        "name": "Memory Usage",
+        "unit": "%",
+        "icon": "mdi:memory",
+        "device_class": None,
+        "state_class": "measurement",
+    },
+    "docker_memory_bytes": {
+        "name": "Memory Usage (Bytes)",
+        "unit": "B",
+        "icon": "mdi:memory",
+        "device_class": "data_size",
+        "state_class": "measurement",
+    },
+    "docker_network_rx": {
+        "name": "Network RX",
+        "unit": "B",
+        "icon": "mdi:download",
+        "device_class": "data_size",
+        "state_class": "total_increasing",
+    },
+    "docker_network_tx": {
+        "name": "Network TX",
+        "unit": "B",
+        "icon": "mdi:upload",
+        "device_class": "data_size",
+        "state_class": "total_increasing",
     },
 }

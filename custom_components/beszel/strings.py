@@ -10,6 +10,7 @@ STRINGS = {
             "use_ssl": "SSL verwenden",
             "username": "Benutzername",
             "password": "Passwort",
+            "include_docker": "Docker-Container überwachen",
             "cannot_connect": (
                 "Verbindung fehlgeschlagen. Überprüfen Sie Host und Port."
             ),
