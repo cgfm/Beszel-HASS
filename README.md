@@ -10,8 +10,6 @@
 
 A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a lightweight server monitoring tool built with PocketBase.
 
-![Beszel Dashboard](https://github.com/henrygd/beszel/raw/main/readme-image.png)
-
 ## Features
 
 - 🖥️ **Server Monitoring**: Monitor CPU, RAM, disk usage, temperature, and network stats
