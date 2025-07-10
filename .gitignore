@@ -84,3 +84,10 @@ release-*/
 *.zip
 .pre-commit-cache/
 beszel-hass-*.zip
+
+# Beszel test configuration files (contain sensitive data)
+beszel_test_config.json
+.env
+.env.local
+logs/
+test*

@@ -7,9 +7,10 @@
         "data": {
           "host": "Host/IP-Adresse",
           "port": "Port",
-          "use_ssl": "SSL verwenden",
+          "ssl": "SSL verwenden",
           "username": "Benutzername",
-          "password": "Passwort"
+          "password": "Passwort",
+          "include_docker": "Docker-Container überwachen"
         }
       }
     },
@@ -26,7 +27,15 @@
     "step": {
       "init": {
         "title": "Beszel Optionen",
-        "description": "Konfigurieren Sie die Optionen für Ihre Beszel-Integration"
+        "description": "Konfigurieren Sie die Optionen für Ihre Beszel-Integration",
+        "data": {
+          "host": "Host/IP-Adresse",
+          "port": "Port",
+          "ssl": "SSL verwenden",
+          "username": "Benutzername",
+          "password": "Passwort",
+          "include_docker": "Docker-Container überwachen"
+        }
       }
     }
   }

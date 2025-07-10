@@ -77,32 +77,25 @@ DOCKER_SENSOR_TYPES = {
         "device_class": None,
         "state_class": "measurement",
     },
-    "docker_memory": {
-        "name": "Memory Usage",
-        "unit": "%",
-        "icon": "mdi:memory",
-        "device_class": None,
-        "state_class": "measurement",
-    },
     "docker_memory_bytes": {
-        "name": "Memory Usage (Bytes)",
-        "unit": "B",
+        "name": "Memory Usage",
+        "unit": "B",  # Use bytes so Home Assistant can auto-format to KB/MB/GB
         "icon": "mdi:memory",
         "device_class": "data_size",
         "state_class": "measurement",
     },
     "docker_network_rx": {
         "name": "Network RX",
-        "unit": "B",
+        "unit": "B/s",  # Use bytes/s so Home Assistant can auto-format
         "icon": "mdi:download",
-        "device_class": "data_size",
-        "state_class": "total_increasing",
+        "device_class": "data_rate",
+        "state_class": "measurement",
     },
     "docker_network_tx": {
         "name": "Network TX",
-        "unit": "B",
+        "unit": "B/s",  # Use bytes/s so Home Assistant can auto-format
         "icon": "mdi:upload",
-        "device_class": "data_size",
-        "state_class": "total_increasing",
+        "device_class": "data_rate",
+        "state_class": "measurement",
     },
 }

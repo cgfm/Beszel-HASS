@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
@@ -12,6 +13,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOCKER_SENSOR_TYPES, DOMAIN, SENSOR_TYPES
 from .coordinator import BeszelDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -35,12 +38,18 @@ async def async_setup_entry(
                 # Handle Docker containers
                 if coordinator.is_docker_enabled():
                     container_name = system_info.get("name", f"Container {system_id}")
+                    system_name = system_info.get("system_name", "Unknown System")
+
+                    # Create display name with system context
+                    display_name = f"{container_name} ({system_name})"
+
                     for sensor_type, sensor_config in DOCKER_SENSOR_TYPES.items():
                         entities.append(
                             BeszelDockerSensor(
                                 coordinator=coordinator,
                                 container_id=system_id,
-                                container_name=container_name,
+                                container_name=display_name,
+                                system_name=system_name,
                                 sensor_type=sensor_type,
                                 sensor_config=sensor_config,
                             )
@@ -82,7 +91,7 @@ class BeszelSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEntity)
         self._sensor_config = sensor_config
 
         self._attr_name = f"{system_name} {sensor_config['name']}"
-        self._attr_unique_id = f"{system_id}_{sensor_type}"
+        self._attr_unique_id = f"{system_id}_{sensor_type}_v4"
         self._attr_native_unit_of_measurement = sensor_config.get("unit")
         self._attr_icon = sensor_config.get("icon")
         self._attr_device_class = sensor_config.get("device_class")
@@ -174,6 +183,7 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
         coordinator: BeszelDataUpdateCoordinator,
         container_id: str,
         container_name: str,
+        system_name: str,
         sensor_type: str,
         sensor_config: dict[str, Any],
     ) -> None:
@@ -182,18 +192,27 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
 
         self._container_id = container_id
         self._container_name = container_name
+        self._system_name = system_name
         self._sensor_type = sensor_type
         self._sensor_config = sensor_config
 
-        # Create unique ID
-        self._attr_unique_id = f"docker_{container_id}_{sensor_type}"
+        # Create unique ID with system name prefix (v5 to force recreation)
+        # Sanitize system name for use in unique_id (remove spaces and special chars)
+        system_prefix = (
+            system_name.lower()
+            .replace(" ", "_")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("-", "_")
+        )
+        self._attr_unique_id = f"{system_prefix}_docker_{container_id}_{sensor_type}_v5"
 
         # Set entity name
         self._attr_name = f"Docker {container_name} {sensor_config['name']}"
 
-        # Set device info
+        # Set device info with system context
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"docker_{container_id}")},
+            "identifiers": {(DOMAIN, f"{system_prefix}_docker_{container_id}")},
             "name": f"Docker: {container_name}",
             "manufacturer": "Docker",
             "model": "Container",
@@ -211,30 +230,140 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
     @property
     def native_value(self) -> Any:
         """Return the state of the sensor."""
+        _LOGGER.debug(
+            "DEBUG: Getting native_value for container_id=%s, sensor_type=%s",
+            self._container_id,
+            self._sensor_type,
+        )
+
         container_data = self.coordinator.get_docker_data(self._container_id)
+
+        _LOGGER.debug(
+            "DEBUG: Container data for %s: %s",
+            self._container_id,
+            "Found" if container_data else "NOT FOUND",
+        )
+
         if not container_data:
+            _LOGGER.warning(
+                "No container data found for container_id: %s", self._container_id
+            )
             return None
 
         stats = container_data.get("stats", {})
+
+        _LOGGER.debug(
+            "DEBUG: Stats for %s: type=%s, keys=%s",
+            self._container_id,
+            type(stats).__name__,
+            list(stats.keys()) if isinstance(stats, dict) else "N/A",
+        )
+
         if not stats:
+            _LOGGER.warning("No stats found for container %s", self._container_id)
             return None
 
-        # Extract values based on sensor type
-        # Try multiple possible field names for different Beszel versions
+        # Extract values based on sensor type using the correct Beszel field mapping
         sensor_mappings = {
-            "docker_cpu": ["cpu_percent", "cpu", "c"],
-            "docker_memory": ["memory_percent", "memory", "m"],
-            "docker_memory_bytes": ["memory_usage", "memory_bytes", "mb"],
-            "docker_network_rx": ["network_rx", "net_rx", "rx"],
-            "docker_network_tx": ["network_tx", "net_tx", "tx"],
+            "docker_cpu": "cpu",  # from 'c' field (percentage)
+            "docker_memory_bytes": "memory",  # from 'm' field (MB from API - convert to bytes)
+            "docker_network_rx": "network_received",  # from 'nr' field (MB/s from API - convert to bytes/s)
+            "docker_network_tx": "network_sent",  # from 'ns' field (MB/s from API - convert to bytes/s)
         }
 
-        possible_keys = sensor_mappings.get(self._sensor_type, [])
-        for key in possible_keys:
-            value = stats.get(key)
-            if value is not None:
+        field_name = sensor_mappings.get(self._sensor_type)
+        _LOGGER.debug(
+            "DEBUG: sensor_type=%s, field_name=%s, available_stats_keys=%s",
+            self._sensor_type,
+            field_name,
+            list(stats.keys()) if stats else "None",
+        )
+
+        if field_name and field_name in stats:
+            value = stats[field_name]
+
+            _LOGGER.debug(
+                "DEBUG: Found value for %s.%s = %s (field: %s)",
+                self._container_id,
+                self._sensor_type,
+                value,
+                field_name,
+            )
+
+            # Convert to appropriate type and unit
+            if isinstance(value, (int, float)):
+                # Convert MB values from API to bytes for Home Assistant
+                if self._sensor_type in [
+                    "docker_memory_bytes",
+                    "docker_network_rx",
+                    "docker_network_tx",
+                ]:
+                    # API sends MB, convert to bytes for Home Assistant auto-formatting
+                    converted_value = float(value) * 1024 * 1024  # MB to bytes
+                    _LOGGER.debug(
+                        "DEBUG: Converted %s MB to %s bytes", value, converted_value
+                    )
+                    return round(converted_value, 0)  # No decimals for bytes
+                else:
+                    return round(float(value), 2)
+            return value
+
+        # Fallback: try raw field access for debugging
+        if "raw" in stats:
+            raw_data = stats["raw"]
+            _LOGGER.debug(
+                "DEBUG: Using raw fallback for %s, raw_data keys: %s",
+                self._container_id,
+                list(raw_data.keys()) if isinstance(raw_data, dict) else "N/A",
+            )
+
+            fallback_mappings = {
+                "docker_cpu": "c",
+                "docker_memory_bytes": "m",  # MB value from API (convert to bytes)
+                "docker_network_rx": "nr",  # MB/s value from API (convert to bytes/s)
+                "docker_network_tx": "ns",  # MB/s value from API (convert to bytes/s)
+            }
+
+            fallback_key = fallback_mappings.get(self._sensor_type)
+            if fallback_key and fallback_key in raw_data:
+                value = raw_data[fallback_key]
+                _LOGGER.debug(
+                    "DEBUG: Found fallback value for %s.%s = %s",
+                    self._container_id,
+                    fallback_key,
+                    value,
+                )
+
+                if isinstance(value, (int, float)):
+                    # Convert MB values from API to bytes for Home Assistant
+                    if self._sensor_type in [
+                        "docker_memory_bytes",
+                        "docker_network_rx",
+                        "docker_network_tx",
+                    ]:
+                        # API sends MB, convert to bytes for Home Assistant auto-formatting
+                        converted_value = float(value) * 1024 * 1024  # MB to bytes
+                        _LOGGER.debug(
+                            "DEBUG: Fallback converted %s MB to %s bytes",
+                            value,
+                            converted_value,
+                        )
+                        return round(converted_value, 0)  # No decimals for bytes
+                    else:
+                        return round(float(value), 2)
                 return value
 
+        _LOGGER.warning(
+            "No value found for sensor %s.%s (checked: %s, fallback: %s)",
+            self._container_id,
+            self._sensor_type,
+            field_name,
+            (
+                fallback_mappings.get(self._sensor_type)
+                if "fallback_mappings" in locals()
+                else "N/A"
+            ),
+        )
         return None
 
     @property
@@ -250,6 +379,8 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
         attributes = {
             "container_id": self._container_id,
             "container_name": container_info.get("name"),
+            "system_id": container_info.get("system"),
+            "system_name": container_info.get("system_name"),
             "image": container_info.get("image"),
             "status": container_info.get("status"),
             "created": container_info.get("created"),
@@ -276,12 +407,13 @@ class BeszelDockerSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
+        # If the container is returned by the API, it's available
+        # The API only returns containers that exist
         container_data = self.coordinator.get_docker_data(self._container_id)
-        if not container_data:
-            return False
+        is_available = container_data is not None
 
-        container_info = container_data.get("system_info", {})
-        status = container_info.get("status", "").lower()
+        _LOGGER.debug(
+            "DEBUG: Container %s available check: %s", self._container_id, is_available
+        )
 
-        # Container is available if it's running
-        return status in ["running", "up"]
+        return is_available

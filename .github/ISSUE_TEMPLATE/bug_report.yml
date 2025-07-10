@@ -1,0 +1,110 @@
+name: Bug Report
+description: File a bug report to help us improve
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+        Before submitting, please:
+        1. Search existing issues to avoid duplicates
+        2. Make sure you're using the latest version
+        3. Check the troubleshooting section in the documentation
+
+  - type: input
+    id: version
+    attributes:
+      label: Integration Version
+      description: What version of the integration are you running?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant Version
+      description: What version of Home Assistant are you running?
+      placeholder: e.g., 2024.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: beszel-version
+    attributes:
+      label: Beszel Version
+      description: What version of Beszel are you running?
+      placeholder: e.g., v0.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Log Output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+      placeholder: |
+        Enable debug logging first:
+
+        logger:
+          logs:
+            custom_components.beszel: debug
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Your integration configuration (remove sensitive data)
+      render: yaml
+      placeholder: |
+        Host: 192.168.1.100
+        Port: 8090
+        Use SSL: false
+        Monitor Docker Containers: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched for existing issues
+          required: true
+        - label: I am using the latest version
+          required: true
+        - label: I have enabled debug logging
+          required: true
+        - label: I have removed sensitive information from logs and configuration
+          required: true
