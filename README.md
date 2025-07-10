@@ -20,30 +20,6 @@ A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a
 - 📊 **Real-time Data**: Live updates of system metrics with user-friendly units
 - 🔌 **Multiple Instances**: Support for multiple Beszel instances
 - 🌐 **SSL Support**: Secure connections to your Beszel server
-- 📱 **Mobile Friendly**: Optimized display units (MB, GB, MB/s) for better mobile experience
-
-## Supported Entities
-
-### System Sensors
-- **CPU Usage** (%) - Current CPU utilization
-- **Memory Usage** (%) - Current RAM utilization
-- **Disk Usage** (%) - Current disk space utilization
-- **Disk Temperature** (°C) - Disk temperature (if available)
-- **Uptime** (seconds) - System uptime with duration device class
-- **Bandwidth** (bytes) - Network bandwidth usage with data size device class
-
-### Docker Container Sensors
-When Docker monitoring is enabled, each container gets:
-- **CPU Usage** (%) - Container CPU utilization
-- **Memory Usage** (bytes) - Container memory usage with automatic unit formatting (MB/GB)
-- **Network RX** (bytes/s) - Network received with automatic rate formatting (MB/s, GB/s)
-- **Network TX** (bytes/s) - Network transmitted with automatic rate formatting (MB/s, GB/s)
-
-### Binary Sensors
-- **System Status** - Online/Offline status of monitored systems
-- **Docker Container Status** - Running/Stopped status of Docker containers
-
-All entities use Home Assistant's native device classes for optimal display and automatic unit conversion (kB, MB, GB, etc.).
 
 ## Installation
 
@@ -116,6 +92,29 @@ Entities are automatically named with descriptive names:
 - `binary_sensor.docker_container_name_system_name_status`
 
 Example: `sensor.docker_vaultwarden_homeserver_memory_usage`
+
+## Supported Entities
+
+### System Sensors
+- **CPU Usage** (%) - Current CPU utilization
+- **Memory Usage** (%) - Current RAM utilization
+- **Disk Usage** (%) - Current disk space utilization
+- **Disk Temperature** (°C) - Disk temperature (if available)
+- **Uptime** (seconds) - System uptime with duration device class
+- **Bandwidth** (bytes) - Network bandwidth usage with data size device class
+
+### Docker Container Sensors
+When Docker monitoring is enabled, each container gets:
+- **CPU Usage** (%) - Container CPU utilization
+- **Memory Usage** (bytes) - Container memory usage with automatic unit formatting (MB/GB)
+- **Network RX** (bytes/s) - Network received with automatic rate formatting (MB/s, GB/s)
+- **Network TX** (bytes/s) - Network transmitted with automatic rate formatting (MB/s, GB/s)
+
+### Binary Sensors
+- **System Status** - Online/Offline status of monitored systems
+- **Docker Container Status** - Running/Stopped status of Docker containers
+
+All entities use Home Assistant's native device classes for optimal display and automatic unit conversion (kB, MB, GB, etc.).
 
 ## Device Classes and Units
 
