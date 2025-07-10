@@ -103,18 +103,6 @@ Monitor Docker Containers: ☑ (checked to include Docker monitoring)
 
 The integration supports multiple Beszel instances. Simply add multiple integrations with different connection details.
 
-### Environment Variables (Development)
-
-For development and testing, you can use environment variables:
-
-```bash
-BESZEL_HOST=192.168.1.100
-BESZEL_PORT=8090
-BESZEL_USER=admin
-BESZEL_PASSWORD=your_password
-BESZEL_SSL=false
-```
-
 ## Entity Naming Convention
 
 Entities are automatically named with descriptive names:
@@ -310,18 +298,6 @@ The integration includes comprehensive testing:
 
 - [Home Assistant Community Forum](https://community.home-assistant.io/)
 - [HACS Discord](https://discord.gg/apgchf8)
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and releases.
-
-## Roadmap
-
-- [ ] Historical data charts
-- [ ] Alert thresholds and notifications
-- [ ] System health monitoring
-- [ ] Performance optimization dashboard
-- [ ] Custom sensor configurations
 
 ## License
 
