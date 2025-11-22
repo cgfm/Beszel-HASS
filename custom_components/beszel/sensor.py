@@ -7,12 +7,13 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOCKER_SENSOR_TYPES, DOMAIN, SENSOR_TYPES
 from .coordinator import BeszelDataUpdateCoordinator
+from .device import async_remove_stale_entities, build_unique_id_prefixes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,6 +70,16 @@ async def async_setup_entry(
                     )
 
     async_add_entities(entities)
+
+    @callback
+    def _async_update_listener() -> None:
+        """Handle coordinator updates and remove stale entities."""
+        if coordinator.data:
+            unique_id_prefixes = build_unique_id_prefixes(coordinator.data)
+            async_remove_stale_entities(hass, entry, unique_id_prefixes)
+
+    # Register listener to remove stale entities when coordinator updates
+    entry.async_on_unload(coordinator.async_add_listener(_async_update_listener))
 
 
 class BeszelSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEntity):
