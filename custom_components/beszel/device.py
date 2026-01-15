@@ -67,6 +67,14 @@ def build_unique_id_prefixes(coordinator_data: dict[str, Any]) -> set[str]:
             # Regular systems use: "{system_id}_{sensor_type}_v4"
             prefixes.add(system_id)
 
+            # Extra filesystems use: "{system_id}_efs_{disk_name}_{sensor_type}_v1"
+            # Add prefixes for each extra filesystem
+            stats = system_data.get("stats", {})
+            efs_data = stats.get("efs", {})
+            if isinstance(efs_data, dict):
+                for disk_name in efs_data.keys():
+                    prefixes.add(f"{system_id}_efs_{disk_name}")
+
     _LOGGER.debug("Built unique ID prefixes: %s", prefixes)
     return prefixes
 
@@ -114,6 +122,7 @@ def async_remove_stale_entities(
         #   Docker (binary): "docker_{container_id}_status_v4"
         #   Docker (sensor): "{system_prefix}_docker_{container_id}_{sensor_type}_v5"
         #   SMART disk: "smart_{system_id}_{disk_id}_{sensor_type}_v1"
+        #   Extra disk: "{system_id}_efs_{disk_name}_{sensor_type}_v1"
 
         should_remove = True
 

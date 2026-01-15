@@ -46,6 +46,24 @@ SENSOR_TYPES = {
         "info_key": "cpu",  # maps to info.cpu in system record
         "data_source": "info",  # Read from info object
     },
+    "cpu_cores": {
+        "name": "CPU Cores",
+        "unit": None,
+        "icon": "mdi:cpu-64-bit",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "info_key": "c",  # maps to info.c (number of CPU cores)
+        "data_source": "info",
+    },
+    "cpu_temp": {
+        "name": "CPU Temperature",
+        "unit": UnitOfTemperature.CELSIUS,
+        "icon": "mdi:thermometer",
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "info_key": "t",  # maps to info.t or stats.t (CPU temperature if available)
+        "data_source": "stats",
+    },
     "memory": {
         "name": "Memory Usage",
         "unit": "%",
@@ -63,6 +81,24 @@ SENSOR_TYPES = {
         "state_class": SensorStateClass.MEASUREMENT,
         "info_key": "dp",  # maps to info.dp (disk percentage)
         "data_source": "info",
+    },
+    "disk_total": {
+        "name": "Disk Total",
+        "unit": UnitOfInformation.GIGABYTES,
+        "icon": "mdi:harddisk",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "info_key": "d",  # maps to stats.d (total disk size in GB)
+        "data_source": "stats",
+    },
+    "disk_used": {
+        "name": "Disk Used",
+        "unit": UnitOfInformation.GIGABYTES,
+        "icon": "mdi:harddisk",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "info_key": "du",  # maps to stats.du (disk used in GB)
+        "data_source": "stats",
     },
     "disk_temp": {
         "name": "Disk Temperature",
@@ -211,6 +247,15 @@ SENSOR_TYPES = {
         "info_key": "s",  # maps to stats.s (total swap in GB from API)
         "data_source": "stats",
     },
+    "memory_buffered": {
+        "name": "Memory Buffered",
+        "unit": UnitOfInformation.GIGABYTES,
+        "icon": "mdi:memory",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "info_key": "mb",  # maps to stats.mb (memory buffered/cache in GB)
+        "data_source": "stats",
+    },
 }
 
 # Docker container sensor types
@@ -242,6 +287,51 @@ DOCKER_SENSOR_TYPES = {
         "icon": "mdi:upload",
         "device_class": SensorDeviceClass.DATA_RATE,
         "state_class": "measurement",
+    },
+}
+
+# Extra disk/filesystem sensor types - for additional mounted disks
+# These are dynamically created based on the 'efs' field in system_stats
+EXTRA_DISK_SENSOR_TYPES = {
+    "usage": {
+        "name": "Usage",
+        "unit": "%",
+        "icon": "mdi:harddisk",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "key": "dp",  # disk percentage (calculated from d and du if not present)
+    },
+    "total": {
+        "name": "Total",
+        "unit": UnitOfInformation.GIGABYTES,
+        "icon": "mdi:harddisk",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "key": "d",  # total disk size in GB
+    },
+    "used": {
+        "name": "Used",
+        "unit": UnitOfInformation.GIGABYTES,
+        "icon": "mdi:harddisk",
+        "device_class": SensorDeviceClass.DATA_SIZE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "key": "du",  # disk used in GB
+    },
+    "read": {
+        "name": "Read Rate",
+        "unit": UnitOfDataRate.MEGABYTES_PER_SECOND,
+        "icon": "mdi:arrow-down-bold",
+        "device_class": SensorDeviceClass.DATA_RATE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "key": "dr",  # disk read in MB/s
+    },
+    "write": {
+        "name": "Write Rate",
+        "unit": UnitOfDataRate.MEGABYTES_PER_SECOND,
+        "icon": "mdi:arrow-up-bold",
+        "device_class": SensorDeviceClass.DATA_RATE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "key": "dw",  # disk write in MB/s
     },
 }
 

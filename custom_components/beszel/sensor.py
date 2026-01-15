@@ -22,7 +22,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, SENSOR_TYPES, SMART_SENSOR_TYPES
+from .const import DOMAIN, SENSOR_TYPES, SMART_SENSOR_TYPES, EXTRA_DISK_SENSOR_TYPES
 from .coordinator import BeszelDataUpdateCoordinator
 from .device import async_remove_stale_entities, build_unique_id_prefixes
 
@@ -147,6 +147,28 @@ async def async_setup_entry(
                             sensor_config=sensor_config,
                         )
                     )
+
+                # Create extra disk/filesystem sensors from 'efs' field in stats
+                stats = system_data.get("stats", {})
+                efs_data = stats.get("efs", {})
+                if isinstance(efs_data, dict) and efs_data:
+                    _LOGGER.debug(
+                        "Found %d extra filesystems for system %s: %s",
+                        len(efs_data), system_name, list(efs_data.keys())
+                    )
+                    for disk_name, disk_stats in efs_data.items():
+                        if isinstance(disk_stats, dict):
+                            for sensor_type, sensor_config in EXTRA_DISK_SENSOR_TYPES.items():
+                                entities.append(
+                                    BeszelExtraDiskSensor(
+                                        coordinator=coordinator,
+                                        system_id=system_id,
+                                        system_name=system_name,
+                                        disk_name=disk_name,
+                                        sensor_type=sensor_type,
+                                        sensor_config=sensor_config,
+                                    )
+                                )
 
     # Create sensors for SMART devices
     for smart_data in coordinator.smart_devices:
@@ -307,8 +329,11 @@ class BeszelSystemSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
                 # Percentages
                 if self._sensor_type in ["cpu", "memory", "disk", "gpu", "battery", "load_1", "load_5", "load_15"]:
                     return round(float(value), 1)
+                # Integer values (cores)
+                elif self._sensor_type in ["cpu_cores"]:
+                    return int(value)
                 # Temperature
-                elif self._sensor_type in ["disk_temp"]:
+                elif self._sensor_type in ["disk_temp", "cpu_temp"]:
                     return round(float(value), 1)
                 # Duration (uptime)
                 elif self._sensor_type == "uptime":
@@ -316,8 +341,8 @@ class BeszelSystemSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorE
                 # Data rates (network, disk io)
                 elif self._sensor_type in ["network_sent", "network_recv", "disk_read", "disk_write"]:
                     return round(float(value), 2)
-                # Data sizes (memory, swap in GB)
-                elif self._sensor_type in ["memory_used", "memory_total", "swap_used", "swap_total", "bandwidth"]:
+                # Data sizes (memory, swap, disk in GB)
+                elif self._sensor_type in ["memory_used", "memory_total", "memory_buffered", "swap_used", "swap_total", "disk_total", "disk_used", "bandwidth"]:
                     return round(float(value), 2)
                 else:
                     return value
@@ -587,5 +612,130 @@ class BeszelSmartSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEn
             smart_attrs = stats.get("attributes", {})
             if smart_attrs:
                 attributes["smart_attributes"] = smart_attrs
+
+        return attributes
+
+
+class BeszelExtraDiskSensor(CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEntity):
+    """Representation of a Beszel extra disk/filesystem sensor."""
+
+    def __init__(
+        self,
+        coordinator: BeszelDataUpdateCoordinator,
+        system_id: str,
+        system_name: str,
+        disk_name: str,
+        sensor_type: str,
+        sensor_config: dict[str, Any],
+    ) -> None:
+        """Initialize the extra disk sensor."""
+        super().__init__(coordinator)
+
+        self._system_id = system_id
+        self._system_name = system_name
+        self._disk_name = disk_name
+        self._sensor_type = sensor_type
+        self._sensor_config = sensor_config
+
+        # Create a clean display name for the disk
+        # Beszel uses double underscores for custom names (e.g., "sdc1__Media" -> "Media")
+        if "__" in disk_name:
+            display_name = disk_name.split("__", 1)[1]
+        else:
+            display_name = disk_name
+
+        self._display_name = display_name
+
+        self._attr_name = f"{system_name} {display_name} {sensor_config['name']}"
+        self._attr_unique_id = f"{system_id}_efs_{disk_name}_{sensor_type}_v1"
+        self._attr_icon = sensor_config["icon"]
+        self._attr_device_class = sensor_config.get("device_class")
+        self._attr_state_class = sensor_config.get("state_class")
+        self._attr_native_unit_of_measurement = sensor_config.get("unit")
+
+        # Group extra disk sensors under the parent system device
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, system_id)},
+        }
+
+    @property
+    def native_value(self) -> str | float | int | None:
+        """Return the state of the sensor."""
+        system_data = self.coordinator.get_system_data(self._system_id)
+        if not system_data:
+            return None
+
+        stats = system_data.get("stats", {})
+        efs_data = stats.get("efs", {})
+        disk_stats = efs_data.get(self._disk_name, {})
+
+        if not isinstance(disk_stats, dict):
+            return None
+
+        key = self._sensor_config.get("key")
+        value = disk_stats.get(key)
+
+        # For disk percentage, calculate it if not present
+        if self._sensor_type == "usage" and value is None:
+            total = disk_stats.get("d")
+            used = disk_stats.get("du")
+            if total and used and float(total) > 0:
+                value = (float(used) / float(total)) * 100
+
+        if value is not None:
+            try:
+                if self._sensor_type == "usage":
+                    return round(float(value), 1)
+                elif self._sensor_type in ["total", "used"]:
+                    return round(float(value), 2)
+                elif self._sensor_type in ["read", "write"]:
+                    return round(float(value), 2)
+                else:
+                    return value
+            except (ValueError, TypeError):
+                _LOGGER.debug(
+                    "Could not convert value %s for extra disk sensor %s",
+                    value, self._sensor_type
+                )
+                return None
+
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return True if entity is available."""
+        system_data = self.coordinator.get_system_data(self._system_id)
+        if not system_data:
+            return False
+
+        stats = system_data.get("stats", {})
+        efs_data = stats.get("efs", {})
+        return (
+            self.coordinator.last_update_success
+            and self._disk_name in efs_data
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        system_data = self.coordinator.get_system_data(self._system_id)
+        if not system_data:
+            return {}
+
+        stats = system_data.get("stats", {})
+        efs_data = stats.get("efs", {})
+        disk_stats = efs_data.get(self._disk_name, {})
+
+        attributes = {
+            "system_id": self._system_id,
+            "system_name": self._system_name,
+            "disk_name": self._disk_name,
+            "display_name": self._display_name,
+        }
+
+        # Add disk size context for usage sensor
+        if self._sensor_type == "usage" and isinstance(disk_stats, dict):
+            attributes["total_gb"] = disk_stats.get("d")
+            attributes["used_gb"] = disk_stats.get("du")
 
         return attributes
