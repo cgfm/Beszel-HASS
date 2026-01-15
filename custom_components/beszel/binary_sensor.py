@@ -54,6 +54,10 @@ async def async_setup_entry(
                             container_name=display_name,
                         )
                     )
+            elif data_type == "smart":
+                # Skip SMART devices - they don't need binary sensors
+                # SMART sensors are handled in sensor.py and attached to parent system devices
+                continue
             else:
                 # Handle regular systems
                 system_name = system_info.get("name", f"System {system_id}")

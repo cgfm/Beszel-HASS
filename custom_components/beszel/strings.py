@@ -20,6 +20,7 @@ STRINGS = {
             "unknown": "Ein unbekannter Fehler ist aufgetreten.",
         },
         "entities": {
+            "ip_address": "IP-Adresse",
             "cpu_usage": "CPU-Auslastung",
             "memory_usage": "Arbeitsspeicher-Auslastung",
             "disk_usage": "Festplatten-Auslastung",
@@ -28,6 +29,12 @@ STRINGS = {
             "temperature": "Temperatur",
             "uptime": "Betriebszeit",
             "status": "Status",
+            "smart_health": "SMART Gesundheit",
+            "smart_temperature": "Festplatten-Temperatur",
+            "smart_reallocated_sectors": "Neu zugewiesene Sektoren",
+            "smart_pending_sectors": "Ausstehende Sektoren",
+            "smart_uncorrectable_sectors": "Nicht korrigierbare Sektoren",
+            "smart_power_on_hours": "Betriebsstunden",
         },
     },
     "en": {
@@ -44,6 +51,7 @@ STRINGS = {
             "unknown": "An unknown error occurred.",
         },
         "entities": {
+            "ip_address": "IP Address",
             "cpu_usage": "CPU Usage",
             "memory_usage": "Memory Usage",
             "disk_usage": "Disk Usage",
@@ -52,6 +60,12 @@ STRINGS = {
             "temperature": "Temperature",
             "uptime": "Uptime",
             "status": "Status",
+            "smart_health": "SMART Health",
+            "smart_temperature": "Disk Temperature",
+            "smart_reallocated_sectors": "Reallocated Sectors",
+            "smart_pending_sectors": "Pending Sectors",
+            "smart_uncorrectable_sectors": "Uncorrectable Sectors",
+            "smart_power_on_hours": "Power On Hours",
         },
     },
 }

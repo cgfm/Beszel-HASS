@@ -26,6 +26,7 @@ class BeszelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.include_docker = entry.data.get(CONF_INCLUDE_DOCKER, True)
         self._docker_debug_done = False  # Initialize debug flag
+        self._smart_debug_done = False  # Initialize SMART debug flag
         self.api = BeszelAPIClient(
             hass=hass,
             host=entry.data[CONF_HOST],
@@ -154,6 +155,62 @@ class BeszelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # Don't fail the entire update if Docker fails
                     pass
 
+            # Add SMART disk data
+            try:
+                smart_devices = await self.api.get_smart_devices()
+                if smart_devices:
+                    if not self._smart_debug_done:
+                        _LOGGER.info(
+                            "Found %d SMART devices across all systems",
+                            len(smart_devices),
+                        )
+                        self._smart_debug_done = True
+
+                    # Get system ID to name mapping for proper naming
+                    system_id_to_name = await self.api.get_system_id_to_name_mapping()
+
+                    # Group SMART devices by system and disk
+                    for device in smart_devices:
+                        system_id = device.get("system")
+                        disk_id = device.get("disk_id")
+
+                        if not system_id or not disk_id:
+                            continue
+
+                        # Get system name for better identification
+                        system_name = system_id_to_name.get(system_id, f"System-{system_id}")
+
+                        # Create unique key for this disk
+                        smart_key = f"smart_{system_id}_{disk_id}"
+
+                        data[smart_key] = {
+                            "system_id": smart_key,
+                            "system_info": {
+                                "id": device.get("id"),
+                                "disk_id": disk_id,
+                                "device": device.get("device"),
+                                "model": device.get("model"),
+                                "system": system_id,
+                                "system_name": system_name,
+                                "updated": device.get("updated"),
+                            },
+                            "stats": {
+                                "state": device.get("state"),
+                                "temp": device.get("temp"),
+                                "attributes": device.get("attributes", {}),
+                            },
+                            "type": "smart",
+                        }
+
+                    _LOGGER.debug(
+                        "Successfully processed %d SMART devices",
+                        len(smart_devices),
+                    )
+
+            except (BeszelAPIError, aiohttp.ClientError) as smart_err:
+                _LOGGER.debug("Error fetching SMART devices: %s", smart_err)
+                # Don't fail the entire update if SMART fails
+
             return data
         except BeszelAPIError as err:
             raise UpdateFailed(f"Error communicating with Beszel API: {err}") from err
@@ -231,3 +288,34 @@ class BeszelDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def is_docker_enabled(self) -> bool:
         """Return whether Docker monitoring is enabled."""
         return self.include_docker
+
+    @property
+    def smart_devices(self) -> list[dict[str, Any]]:
+        """Return list of SMART devices."""
+        if not self.data:
+            return []
+
+        devices = []
+        for key, device_data in self.data.items():
+            if key.startswith("smart_") and device_data.get("type") == "smart":
+                devices.append(device_data)
+
+        return devices
+
+    def get_smart_data(self, smart_key: str) -> dict[str, Any] | None:
+        """Get data for a specific SMART device."""
+        if not self.data:
+            return None
+
+        # Try direct lookup first
+        direct_result = self.data.get(smart_key)
+        if direct_result and direct_result.get("type") == "smart":
+            return direct_result
+
+        # Try with smart_ prefix
+        if not smart_key.startswith("smart_"):
+            prefixed_result = self.data.get(f"smart_{smart_key}")
+            if prefixed_result and prefixed_result.get("type") == "smart":
+                return prefixed_result
+
+        return None

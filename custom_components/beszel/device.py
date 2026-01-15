@@ -55,6 +55,14 @@ def build_unique_id_prefixes(coordinator_data: dict[str, Any]) -> set[str]:
                 .replace("-", "_")
             )
             prefixes.add(f"{system_prefix}_docker_{system_id}")
+        elif data_type == "smart":
+            # SMART devices use: "smart_{system_id}_{disk_id}_{sensor_type}_v1"
+            # The system_id in coordinator data for SMART is already "smart_{system_id}_{disk_id}"
+            # but we need to extract components for the prefix
+            disk_id = system_info.get("disk_id")
+            parent_system_id = system_info.get("system")
+            if disk_id and parent_system_id:
+                prefixes.add(f"smart_{parent_system_id}_{disk_id}")
         else:
             # Regular systems use: "{system_id}_{sensor_type}_v4"
             prefixes.add(system_id)
@@ -105,6 +113,7 @@ def async_remove_stale_entities(
         #   Regular system: "{system_id}_{sensor_type}_v4"
         #   Docker (binary): "docker_{container_id}_status_v4"
         #   Docker (sensor): "{system_prefix}_docker_{container_id}_{sensor_type}_v5"
+        #   SMART disk: "smart_{system_id}_{disk_id}_{sensor_type}_v1"
 
         should_remove = True
 

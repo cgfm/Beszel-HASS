@@ -179,14 +179,67 @@ class BeszelAPIClient:
     ) -> dict[str, Any]:
         """Get stats for a system and include system info."""
         try:
-            stats = await self.get_system_stats(system_id)
-            return {"system_id": system_id, "system_info": system_info, "stats": stats}
+            stats_response = await self.get_system_stats(system_id)
+
+            # Debug: Log the full system record structure to understand what Beszel returns
+            _LOGGER.debug(
+                "System record for %s: keys=%s",
+                system_info.get("name", system_id),
+                list(stats_response.keys()) if isinstance(stats_response, dict) else "N/A"
+            )
+
+            # Check if the system record itself contains an 'info' field with metrics
+            # Beszel stores real-time metrics in the 'info' field of the system record
+            if "info" in stats_response:
+                _LOGGER.debug(
+                    "Found 'info' field in system record for %s: %s",
+                    system_info.get("name", system_id),
+                    stats_response.get("info")
+                )
+                # Merge the info field into system_info so sensors can access it
+                system_info["info"] = stats_response.get("info", {})
+
+            # Get the latest stats from system_stats collection (contains performance metrics)
+            stats_data = {}
+            try:
+                headers = {"Authorization": f"Bearer {self._auth_token}"}
+                stats_collection_url = f"{self._base_url}/api/collections/system_stats/records"
+                params = {
+                    "filter": f"system='{system_id}'",
+                    "sort": "-created",
+                    "perPage": 1
+                }
+
+                async with self._session.get(
+                    stats_collection_url, headers=headers, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                ) as stats_col_response:
+                    if stats_col_response.status == 200:
+                        stats_col_data = await stats_col_response.json()
+                        if stats_col_data.get("items") and len(stats_col_data["items"]) > 0:
+                            latest_stat = stats_col_data["items"][0]
+                            # Extract the stats field from the system_stats record
+                            stats_data = latest_stat.get("stats", {}) if isinstance(latest_stat.get("stats"), dict) else {}
+                            _LOGGER.debug(
+                                "Loaded %d performance metrics from system_stats for %s: keys=%s",
+                                len(stats_data),
+                                system_info.get("name", system_id),
+                                list(stats_data.keys()) if isinstance(stats_data, dict) else "N/A"
+                            )
+            except Exception as e:
+                _LOGGER.debug("Could not fetch from system_stats collection: %s", e)
+
+            # Return the combined data with stats from system_stats collection
+            return {
+                "system_id": system_id,
+                "system_info": system_info,
+                "stats": stats_data  # Performance metrics from system_stats collection
+            }
         except BeszelAPIError as err:
             _LOGGER.error("Error getting stats for system %s: %s", system_id, err)
             return {
                 "system_id": system_id,
                 "system_info": system_info,
-                "stats": None,
+                "stats": {},
                 "error": str(err),
             }
 
@@ -743,6 +796,122 @@ class BeszelAPIClient:
         except aiohttp.ClientError as err:
             _LOGGER.error("Error listing collections: %s", err)
             raise BeszelAPIError(f"Network error: {err}") from err
+
+    async def get_smart_devices(self) -> list[dict[str, Any]]:
+        """Get SMART device data from PocketBase."""
+        if not self._auth_token:
+            if not await self.authenticate():
+                raise BeszelAPIError("Authentication failed")
+
+        try:
+            headers = {"Authorization": f"Bearer {self._auth_token}"}
+            url = f"{self._base_url}/api/collections/smart_devices/records"
+            params = {
+                "perPage": 500,  # Get all SMART devices
+            }
+
+            _LOGGER.debug("Fetching SMART devices from: %s", url)
+
+            async with self._session.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status == 401:
+                    # Token might be expired, try to re-authenticate
+                    if await self.authenticate():
+                        headers = {"Authorization": f"Bearer {self._auth_token}"}
+                        async with self._session.get(
+                            url,
+                            headers=headers,
+                            params=params,
+                            timeout=aiohttp.ClientTimeout(total=10),
+                        ) as retry_response:
+                            if retry_response.status == 200:
+                                data = await retry_response.json()
+                                return self._process_smart_devices(data)
+                    raise BeszelAPIError("Authentication failed after retry")
+
+                elif response.status == 200:
+                    data = await response.json()
+                    devices = self._process_smart_devices(data)
+                    _LOGGER.debug("Found %d SMART devices", len(devices))
+                    return devices
+
+                elif response.status == 404:
+                    _LOGGER.debug(
+                        "smart_devices collection not found - SMART monitoring may not be configured"
+                    )
+                    return []
+
+                else:
+                    _LOGGER.warning(
+                        "Failed to fetch SMART devices: HTTP %d", response.status
+                    )
+                    return []
+
+        except aiohttp.ClientError as err:
+            _LOGGER.debug("Network error while fetching SMART devices: %s", err)
+            return []
+
+    def _process_smart_devices(self, data: dict[str, Any]) -> list[dict[str, Any]]:
+        """Process SMART device data from PocketBase response."""
+        devices = []
+        items = data.get("items", [])
+
+        for item in items:
+            try:
+                device_id = item.get("id")
+                system_id = item.get("system")
+                device_path = item.get("device", "")  # e.g., "/dev/sda"
+                model = item.get("model", "Unknown Disk")
+                state = item.get("state", "unknown")  # e.g., "passed", "failed"
+                temp = item.get("temp")
+                attributes = item.get("attributes", [])
+
+                # Create a clean disk identifier from device path
+                # e.g., "/dev/sda" -> "sda", "/dev/nvme0n1" -> "nvme0n1"
+                disk_id = device_path.replace("/dev/", "").replace("/", "_") or device_id
+
+                # Process SMART attributes into a lookup dict
+                attr_dict = {}
+                if isinstance(attributes, list):
+                    for attr in attributes:
+                        if isinstance(attr, dict):
+                            attr_id = attr.get("id")
+                            if attr_id is not None:
+                                # Store the raw value (rv) by attribute ID
+                                attr_dict[attr_id] = attr.get("rv", attr.get("raw", 0))
+
+                device_info = {
+                    "id": device_id,
+                    "system": system_id,
+                    "disk_id": disk_id,
+                    "device": device_path,
+                    "model": model,
+                    "state": state,
+                    "temp": temp,
+                    "attributes": attr_dict,
+                    "raw_attributes": attributes,  # Keep original for debugging
+                    "updated": item.get("updated"),
+                }
+                devices.append(device_info)
+
+                _LOGGER.debug(
+                    "SMART device: %s (%s) on system %s - state: %s, temp: %s",
+                    model,
+                    disk_id,
+                    system_id,
+                    state,
+                    temp,
+                )
+
+            except Exception as err:
+                _LOGGER.warning("Error processing SMART device: %s", err)
+                continue
+
+        return devices
 
 
 class BeszelAPIError(Exception):
