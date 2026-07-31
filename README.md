@@ -1,348 +1,126 @@
 # Beszel Home Assistant Integration
 
 [![GitHub Release][releases-shield]][releases]
-[![GitHub Activity][commits-shield]][commits]
+[![HACS Custom][hacsbadge]][hacs]
 [![License][license-shield]](LICENSE)
-[![hacs][hacsbadge]][hacs]
-[![Project Maintenance][maintenance-shield]][user_profile]
 
-**This integration can be installed through HACS.**
+This custom integration exposes systems, containers, extra filesystems, and SMART
+disks from a [Beszel](https://github.com/henrygd/beszel) Hub in Home Assistant.
 
-A Home Assistant integration for [Beszel](https://github.com/henrygd/beszel) - a lightweight server monitoring tool built with PocketBase.
+## Highlights
 
-![Beszel Dashboard](https://github.com/henrygd/beszel/raw/main/readme-image.png)
-
-## Features
-
-- 🖥️ **Server Monitoring**: Monitor CPU, RAM, disk usage, temperature, and network stats
-- 🐳 **Docker Container Monitoring**: Complete monitoring of Docker containers with auto-discovery
-- 🔄 **Auto Discovery**: Automatically discovers all monitored servers from your Beszel instance
-- ⚙️ **Easy Setup**: Configure through Home Assistant UI with config flow
-- 🏠 **Native Integration**: Full Home Assistant integration with devices and entities
-- 📊 **Real-time Data**: Live updates of system metrics with user-friendly units
-- 🔌 **Multiple Instances**: Support for multiple Beszel instances
-- 🌐 **SSL Support**: Secure connections to your Beszel server
-
-## Installation
-
-### HACS (Recommended)
-
-1. Open HACS in Home Assistant
-2. Go to "Integrations"
-3. Click the three dots menu (⋮) in the top right
-4. Select "Custom repositories"
-5. Add this repository URL: `https://github.com/cgfm/beszel-hass`
-6. Select "Integration" as the category
-7. Click "Add"
-8. Search for "Beszel" and install it
-9. Restart Home Assistant
-
-### Manual Installation
-
-1. Download the latest release from [GitHub Releases](https://github.com/cgfm/beszel-hass/releases)
-2. Extract the files
-3. Copy the `custom_components/beszel` folder to your Home Assistant `config/custom_components/` directory
-4. Restart Home Assistant
-
-## Configuration
-
-### Initial Setup
-
-1. Go to "Settings" > "Devices & Services" in Home Assistant
-2. Click "+ Add Integration"
-3. Search for "Beszel"
-4. Enter your Beszel server details:
-
-#### Configuration Options
-
-| Field | Description | Default | Required |
-|-------|-------------|---------|----------|
-| **Host** | Your Beszel server hostname or IP address | - | ✅ |
-| **Port** | Port number of your Beszel instance | 8090 | ✅ |
-| **Username** | Your Beszel username | - | ✅ |
-| **Password** | Your Beszel password | - | ✅ |
-| **Use SSL** | Enable if using HTTPS connection | False | ❌ |
-| **Monitor Docker Containers** | Include Docker container monitoring | True | ❌ |
-
-#### Example Configuration
-
-```
-Host: 192.168.1.100
-Port: 8090
-Username: admin
-Password: your_secure_password
-Use SSL: ☐ (unchecked for HTTP)
-Monitor Docker Containers: ☑ (checked to include Docker monitoring)
-```
-
-### Advanced Configuration
-
-The integration supports multiple Beszel instances. Simply add multiple integrations with different connection details.
-
-### Environment Variables (Development)
-
-For development and testing, you can use environment variables:
-
-```bash
-BESZEL_HOST=192.168.1.100
-BESZEL_PORT=8090
-BESZEL_USER=admin
-BESZEL_PASSWORD=your_password
-BESZEL_SSL=false
-```
-
-## Entity Naming Convention
-
-Entities are automatically named with descriptive names:
-
-### System Entities
-- `sensor.server_name_cpu_usage`
-- `sensor.server_name_memory_usage`
-- `binary_sensor.server_name_status`
-
-### Docker Container Entities
-- `sensor.docker_container_name_system_name_cpu_usage`
-- `sensor.docker_container_name_system_name_memory_usage`
-- `binary_sensor.docker_container_name_system_name_status`
-
-Example: `sensor.docker_vaultwarden_homeserver_memory_usage`
-
-## Supported Entities
-
-### System Sensors
-- **CPU Usage** (%) - Current CPU utilization
-- **Memory Usage** (%) - Current RAM utilization
-- **Disk Usage** (%) - Current disk space utilization
-- **Disk Temperature** (°C) - Disk temperature (if available)
-- **Uptime** (seconds) - System uptime with duration device class
-- **Bandwidth** (bytes) - Network bandwidth usage with data size device class
-
-### Docker Container Sensors
-When Docker monitoring is enabled, each container gets:
-- **CPU Usage** (%) - Container CPU utilization
-- **Memory Usage** (bytes) - Container memory usage with automatic unit formatting (MB/GB)
-- **Network RX** (bytes/s) - Network received with automatic rate formatting (MB/s, GB/s)
-- **Network TX** (bytes/s) - Network transmitted with automatic rate formatting (MB/s, GB/s)
-
-### Binary Sensors
-- **System Status** - Online/Offline status of monitored systems
-- **Docker Container Status** - Running/Stopped status of Docker containers
-
-All entities use Home Assistant's native device classes for optimal display and automatic unit conversion (kB, MB, GB, etc.).
-
-## Device Classes and Units
-
-The integration uses Home Assistant's native device classes for optimal display:
-
-| Sensor Type | Device Class | Unit | Auto-Formatting |
-|-------------|--------------|------|----------------|
-| CPU Usage | - | % | No |
-| Memory Usage | `data_size` | bytes | Yes (MB, GB) |
-| Disk Usage | - | % | No |
-| Disk Temperature | `temperature` | °C | No |
-| Network RX/TX | `data_rate` | bytes/s | Yes (MB/s, GB/s) |
-| Uptime | `duration` | seconds | Yes (days, hours) |
-| Bandwidth | `data_size` | bytes | Yes (MB, GB) |
+- Local polling through Beszel's PocketBase API
+- Automatic discovery of new systems, containers, filesystems, and SMART disks
+- Current and legacy Beszel metric formats normalized to correct Home Assistant units
+- Real container running state on current Beszel versions
+- Pagination for installations with more than one PocketBase page of records
+- Automatic token refresh and a Home Assistant reauthentication flow
+- Configurable update interval from 10 to 3600 seconds
+- English and German config-flow and entity translations
+- Stable, hub-scoped entity and device identifiers
 
 ## Requirements
 
-- **Home Assistant**: 2023.1.0 or newer
-- **Beszel Server**: Latest version with PocketBase API enabled
-- **Python**: 3.10+ (handled by Home Assistant)
-- **Network Access**: Home Assistant must be able to reach your Beszel instance
+- Home Assistant 2024.12.0 or newer
+- A Beszel Hub reachable from Home Assistant
+- A Beszel user with permission to read the monitored systems
+- Password login enabled for that user; OAuth-only Beszel accounts cannot currently be
+  used by this integration
 
-### Beszel Server Requirements
+The integration stores the configured credentials in Home Assistant's config entry.
+HTTP sends those credentials and the session token without transport encryption. Use
+HTTPS whenever traffic leaves a trusted local network.
 
-Your Beszel instance should be:
-- Running and accessible from Home Assistant
-- Configured with at least one monitored system
-- Have valid user credentials for API access
+## Installation
+
+### HACS
+
+1. In HACS, open **Integrations** and select **Custom repositories**.
+2. Add `https://github.com/cgfm/beszel-hass` as an **Integration** repository.
+3. Install **Beszel** and restart Home Assistant.
+
+### Manual
+
+Copy `custom_components/beszel` into `<config>/custom_components/beszel`, then
+restart Home Assistant. See [INSTALLATION.md](INSTALLATION.md) for more detail.
+
+## Configuration
+
+Go to **Settings → Devices & services → Add integration → Beszel**.
+
+| Field | Meaning | Default |
+| --- | --- | --- |
+| Host | Hostname or IP only; no scheme, port, or path | — |
+| Port | Beszel Hub port | `8090` |
+| Use HTTPS | Connect using TLS | Off |
+| Email or username / password | Beszel user credentials | — |
+| Monitor containers | Discover Docker and Podman containers | On |
+| Update interval | Polling interval in seconds (`10`–`3600`) | `30` |
+
+The exact same HTTPS/host/port endpoint can only be configured once. Different
+Beszel Hubs remain separate even if their internal PocketBase record IDs happen to
+match.
+
+## Entities and units
+
+System devices expose CPU, memory, disk, load, GPU, battery, temperature, uptime,
+bandwidth, disk I/O, network I/O, memory/swap sizes, IP address, and connectivity
+where Beszel supplies the value. Extra filesystems add usage, size, and I/O sensors.
+SMART records create separate disk devices with health, temperature, sector counts,
+and power-on hours.
+
+Container devices expose:
+
+| Sensor | Native unit |
+| --- | --- |
+| CPU usage | `%` |
+| Memory usage | `MB` |
+| Network sent / received | `B/s` |
+| Running status | Binary sensor |
+
+System disk/network rates and bandwidth are also exposed as `B/s`. Legacy Beszel
+rate fields are converted with Beszel's 1024² factor; new byte fields are used
+directly. Disk and memory capacities remain in GB, matching Beszel's API.
+
+Inventory is not deleted after a single failed or incomplete poll. A record must be
+absent from three complete inventory updates before its exact entities are retired.
 
 ## Troubleshooting
 
-### Common Issues
-
-#### Authentication Failed
-```
-Error: Failed to authenticate with Beszel server
-```
-
-**Solutions:**
-- Verify your Beszel username and password
-- Check if your Beszel instance is accessible via the configured host/port
-- Ensure the PocketBase API is enabled and running
-- Test connection manually: `http://your-host:8090/api/health`
-
-#### No Systems Found
-```
-Warning: No systems found in Beszel instance
-```
-
-**Solutions:**
-- Ensure you have systems configured and running in Beszel
-- Check if systems are actively reporting data (green status in Beszel UI)
-- Verify your user account has permission to view systems
-- Wait a few minutes for systems to report initial data
-
-#### Connection Issues
-```
-Error: Unable to connect to Beszel server
-```
-
-**Solutions:**
-- Check host and port settings
-- Verify SSL settings match your Beszel setup (HTTP vs HTTPS)
-- Ensure your Beszel instance is running and accessible
-- Check firewall settings on both Home Assistant and Beszel server
-- Test network connectivity: `ping your-beszel-host`
-
-#### Docker Containers Not Showing
-```
-Info: Docker monitoring enabled but no containers found
-```
-
-**Solutions:**
-- Ensure Docker containers are configured in Beszel
-- Check if Docker monitoring is enabled in your Beszel agent
-- Verify containers are running and reporting to Beszel
-- Disable and re-enable Docker monitoring in the integration settings
-
-### Debug Logging
-
-To enable detailed debug logging for troubleshooting:
+Enable debug logging temporarily:
 
 ```yaml
-# configuration.yaml
 logger:
-  default: warning
   logs:
     custom_components.beszel: debug
-    custom_components.beszel.api: debug
-    custom_components.beszel.coordinator: debug
 ```
 
-After adding this configuration:
-1. Restart Home Assistant
-2. Go to "Settings" > "System" > "Logs"
-3. Look for `custom_components.beszel` entries
+Common checks:
 
-### Performance Considerations
-
-- **Update Interval**: Default is 30 seconds, configurable in integration options
-- **API Rate Limiting**: The integration respects Beszel's API limits
-- **Memory Usage**: Minimal impact, typically <10MB additional RAM usage
-- **Network Traffic**: ~1-5KB per update per monitored system
-
-## API Compatibility
-
-This integration is compatible with:
-- **Beszel**: v0.1.0 and newer
-- **PocketBase**: v0.16.0 and newer (included with Beszel)
+- Confirm `http(s)://HOST:PORT/api/health` is reachable from Home Assistant.
+- Confirm the user can see the systems in the Beszel UI.
+- Match the HTTPS option to the Hub or reverse proxy.
+- If password authentication was disabled in Beszel, enable it for a dedicated
+  integration user.
 
 ## Development
 
-### Contributing
+```bash
+python -m pip install -r requirements_dev.txt
+for file in custom_components/beszel/*.py tests/*.py create_release.py; do black --workers 1 --check "$file"; done
+isort --check-only custom_components/beszel/*.py tests/*.py create_release.py
+pytest -v
+```
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-### Development Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/cgfm/beszel-hass.git
-   cd beszel-hass
-   ```
-
-2. **Install development dependencies:**
-   ```bash
-   pip install -r requirements_dev.txt
-   ```
-
-3. **Install pre-commit hooks:**
-   ```bash
-   pre-commit install
-   ```
-
-4. **Set up test environment:**
-   ```bash
-   # Copy and edit environment file
-   cp .env.example .env
-   # Edit .env with your test Beszel instance details
-   ```
-
-5. **Development workflow:**
-   ```bash
-   # Make your changes
-   # Run linting
-   black custom_components/beszel/
-   pylint custom_components/beszel/
-
-   # Test your changes
-   # Submit a pull request
-   ```
-
-### Code Quality
-
-This project uses:
-- **Black** for code formatting
-- **Pylint** for code analysis
-- **MyPy** for type checking
-- **Pre-commit** hooks for automated checks
-
-### Testing
-
-The integration includes comprehensive testing:
-- Unit tests for all components
-- Integration tests with mock Beszel server
-- Automated testing via GitHub Actions
-
-## Support
-
-### Getting Help
-
-- 🐛 **Bug Reports**: [Open an issue](https://github.com/cgfm/beszel-hass/issues/new?template=bug_report.md)
-- 💡 **Feature Requests**: [Request a feature](https://github.com/cgfm/beszel-hass/issues/new?template=feature_request.md)
-- ❓ **Questions**: [Start a discussion](https://github.com/cgfm/beszel-hass/discussions)
-- 📖 **Beszel Server Issues**: [Beszel documentation](https://github.com/henrygd/beszel)
-
-### Community
-
-- [Home Assistant Community Forum](https://community.home-assistant.io/)
-- [HACS Discord](https://discord.gg/apgchf8)
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes and releases.
-
-## Roadmap
-
-- [ ] Historical data charts
-- [ ] Alert thresholds and notifications
-- [ ] System health monitoring
-- [ ] Performance optimization dashboard
-- [ ] Custom sensor configurations
+The release archive is created with `python create_release.py`. Changes in version
+1.2.0 are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- **[Beszel](https://github.com/henrygd/beszel)** by henrygd - Excellent lightweight server monitoring
-- **Home Assistant Community** - Framework and integration patterns
-- **HACS** - Making custom integrations accessible
-- **Contributors** - Everyone who helps improve this integration
-
----
-
-**Star this repository** ⭐ if you find it useful!
+MIT — see [LICENSE](LICENSE).
 
 [releases-shield]: https://img.shields.io/github/release/cgfm/beszel-hass.svg?style=for-the-badge
 [releases]: https://github.com/cgfm/beszel-hass/releases
-[commits-shield]: https://img.shields.io/github/commit-activity/y/cgfm/beszel-hass.svg?style=for-the-badge
-[commits]: https://github.com/cgfm/beszel-hass/commits/main
 [license-shield]: https://img.shields.io/github/license/cgfm/beszel-hass.svg?style=for-the-badge
 [hacsbadge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
 [hacs]: https://github.com/hacs/integration
-[maintenance-shield]: https://img.shields.io/badge/maintainer-cgfm-blue.svg?style=for-the-badge
-[user_profile]: https://github.com/cgfm

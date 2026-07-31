@@ -90,4 +90,4 @@ beszel_test_config.json
 .env
 .env.local
 logs/
-test*
+test-results/

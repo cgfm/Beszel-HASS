@@ -1,13 +1,13 @@
-"""Support for Beszel binary sensors."""
+"""Binary sensor platform for Beszel."""
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
+    BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -16,9 +16,24 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import BeszelDataUpdateCoordinator
-from .device import async_remove_stale_entities, build_unique_id_prefixes
+from .device import (
+    async_remove_device_if_empty,
+    async_remove_entity,
+    container_device_info,
+    entity_unique_id,
+    system_device_info,
+)
 
-_LOGGER = logging.getLogger(__name__)
+SYSTEM_STATUS_DESCRIPTION = BinarySensorEntityDescription(
+    key="status",
+    translation_key="status",
+    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+)
+CONTAINER_STATUS_DESCRIPTION = BinarySensorEntityDescription(
+    key="status",
+    translation_key="status",
+    device_class=BinarySensorDeviceClass.RUNNING,
+)
 
 
 async def async_setup_entry(
@@ -26,222 +41,158 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Beszel binary sensors based on a config entry."""
+    """Set up Beszel binary sensors and later inventory changes."""
     coordinator: BeszelDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-
-    entities = []
-
-    # Create status sensors for each system
-    for system_data in coordinator.data.values():
-        if "system_info" in system_data:
-            data_type = system_data.get("type", "system")
-            system_info = system_data["system_info"]
-            system_id = system_info.get("id")
-
-            if data_type == "docker":
-                # Handle Docker containers
-                if coordinator.is_docker_enabled():
-                    container_name = system_info.get("name", f"Container {system_id}")
-                    system_name = system_info.get("system_name", "Unknown System")
-
-                    # Create display name with system context
-                    display_name = f"{container_name} ({system_name})"
-
-                    entities.append(
-                        BeszelDockerBinarySensor(
-                            coordinator=coordinator,
-                            container_id=system_id,
-                            container_name=display_name,
-                        )
-                    )
-            elif data_type == "smart":
-                # Skip SMART devices - they don't need binary sensors
-                # SMART sensors are handled in sensor.py and attached to parent system devices
-                continue
-            else:
-                # Handle regular systems
-                system_name = system_info.get("name", f"System {system_id}")
-                entities.append(
-                    BeszelBinarySensor(
-                        coordinator=coordinator,
-                        system_id=system_id,
-                        system_name=system_name,
-                    )
-                )
-
-    async_add_entities(entities)
-
-    @callback
-    def _async_update_listener() -> None:
-        """Handle coordinator updates and remove stale entities."""
-        if coordinator.data:
-            unique_id_prefixes = build_unique_id_prefixes(coordinator.data)
-            async_remove_stale_entities(hass, entry, unique_id_prefixes)
-
-    # Register listener to remove stale entities when coordinator updates
-    entry.async_on_unload(coordinator.async_add_listener(_async_update_listener))
+    manager = BeszelBinarySensorManager(hass, coordinator, async_add_entities)
+    manager.async_update_entities()
+    entry.async_on_unload(coordinator.async_add_listener(manager.async_update_entities))
 
 
-class BeszelBinarySensor(
-    CoordinatorEntity[BeszelDataUpdateCoordinator], BinarySensorEntity
-):
-    """Representation of a Beszel system status binary sensor."""
+class BeszelBinarySensorManager:
+    """Manage dynamic system and container status entities."""
 
     def __init__(
         self,
+        hass: HomeAssistant,
         coordinator: BeszelDataUpdateCoordinator,
-        system_id: str,
-        system_name: str,
+        async_add_entities: AddEntitiesCallback,
     ) -> None:
-        """Initialize the binary sensor."""
+        self._hass = hass
+        self._coordinator = coordinator
+        self._async_add_entities = async_add_entities
+        self._targets: dict[str, BinarySensorEntity] = {}
+
+    @callback
+    def async_update_entities(self) -> None:
+        current: set[str] = set()
+        new_entities: list[BinarySensorEntity] = []
+        for system_id in self._coordinator.systems:
+            target = f"system:{system_id}"
+            current.add(target)
+            if target not in self._targets:
+                entity = BeszelSystemBinarySensor(self._coordinator, system_id)
+                self._targets[target] = entity
+                new_entities.append(entity)
+        for container_id in self._coordinator.containers:
+            target = f"container:{container_id}"
+            current.add(target)
+            if target not in self._targets:
+                entity = BeszelContainerBinarySensor(self._coordinator, container_id)
+                self._targets[target] = entity
+                new_entities.append(entity)
+        if new_entities:
+            self._async_add_entities(new_entities)
+        for target in set(self._targets) - current:
+            entity = self._targets.pop(target)
+            async_remove_entity(self._hass, "binary_sensor", entity)
+            kind, record_id = target.split(":", 1)
+            async_remove_device_if_empty(
+                self._hass,
+                self._coordinator,
+                kind,
+                record_id,
+            )
+
+
+class BeszelSystemBinarySensor(
+    CoordinatorEntity[BeszelDataUpdateCoordinator], BinarySensorEntity
+):
+    """System connectivity reported by Beszel."""
+
+    _attr_has_entity_name = True
+    entity_description = SYSTEM_STATUS_DESCRIPTION
+
+    def __init__(
+        self, coordinator: BeszelDataUpdateCoordinator, system_id: str
+    ) -> None:
         super().__init__(coordinator)
-
         self._system_id = system_id
-        self._system_name = system_name
-
-        self._attr_name = f"{system_name} Status"
-        self._attr_unique_id = f"{system_id}_status_v4"
-        self._attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-
-        # Device info
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, system_id)},
-            "name": system_name,
-            "manufacturer": "Beszel",
-            "model": "Server Monitor",
-        }
+        self._attr_unique_id = entity_unique_id(
+            coordinator, "system", system_id, "status"
+        )
+        self._attr_device_info = system_device_info(
+            coordinator, coordinator.systems[system_id]
+        )
 
     @property
     def is_on(self) -> bool:
-        """Return true if the binary sensor is on."""
-        system_data = self.coordinator.get_system_data(self._system_id)
-        if not system_data:
-            return False
-
-        system_info = system_data.get("system_info", {})
-        status = system_info.get("status", "").lower()
-
-        # System is "on" if status is "up"
-        return status == "up"
+        system = self.coordinator.get_system_data(self._system_id)
+        return bool(system and system.get("status") == "up")
 
     @property
     def available(self) -> bool:
-        """Return if entity is available."""
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.get_system_data(self._system_id) is not None
+        system = self.coordinator.get_system_data(self._system_id)
+        return bool(
+            self.coordinator.last_update_success and system and not system.get("stale")
         )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return additional state attributes."""
-        system_data = self.coordinator.get_system_data(self._system_id)
-        if not system_data:
+        system = self.coordinator.get_system_data(self._system_id)
+        if not system:
             return None
-
-        system_info = system_data.get("system_info", {})
-
         return {
             "system_id": self._system_id,
-            "system_name": system_info.get("name"),
-            "host": system_info.get("host"),
-            "port": system_info.get("port"),
-            "status": system_info.get("status"),
-            "last_updated": system_info.get("updated"),
+            "host": system.get("host"),
+            "port": system.get("port"),
+            "status": system.get("status"),
+            "last_updated": system.get("updated"),
         }
 
 
-class BeszelDockerBinarySensor(
+class BeszelContainerBinarySensor(
     CoordinatorEntity[BeszelDataUpdateCoordinator], BinarySensorEntity
 ):
-    """Representation of a Beszel Docker container status binary sensor."""
+    """Actual container running state reported by Beszel."""
+
+    _attr_has_entity_name = True
+    entity_description = CONTAINER_STATUS_DESCRIPTION
 
     def __init__(
-        self,
-        coordinator: BeszelDataUpdateCoordinator,
-        container_id: str,
-        container_name: str,
+        self, coordinator: BeszelDataUpdateCoordinator, container_id: str
     ) -> None:
-        """Initialize the binary sensor."""
         super().__init__(coordinator)
-
         self._container_id = container_id
-        self._container_name = container_name
-
-        # Create unique ID (v4 to force recreation and match sensor format)
-        self._attr_unique_id = f"docker_{container_id}_status_v4"
-
-        # Set entity name
-        self._attr_name = f"Docker {container_name} Status"
-
-        # Set device class
-        self._attr_device_class = BinarySensorDeviceClass.RUNNING
-
-        # Set device info
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"docker_{container_id}")},
-            "name": f"Docker: {container_name}",
-            "manufacturer": "Docker",
-            "model": "Container",
-            "configuration_url": None,
-        }
+        self._attr_unique_id = entity_unique_id(
+            coordinator, "container", container_id, "status"
+        )
+        self._attr_device_info = container_device_info(
+            coordinator, coordinator.containers[container_id]
+        )
 
     @property
     def is_on(self) -> bool:
-        """Return true if the binary sensor is on."""
-        container_data = self.coordinator.get_docker_data(self._container_id)
-        if not container_data:
-            _LOGGER.debug(
-                "DEBUG: Binary sensor %s - no container data", self._container_id
-            )
-            return False
-
-        container_info = container_data.get("system_info", {})
-        status = container_info.get("status", "").lower()
-
-        _LOGGER.debug(
-            "DEBUG: Binary sensor %s - status='%s'", self._container_id, status
-        )
-
-        # If we have container data from the API, the container is running
-        # The API only returns containers that exist and are active
-        _LOGGER.debug(
-            "DEBUG: Binary sensor %s - container exists, setting to ON",
-            self._container_id,
-        )
-
-        return True
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes."""
-        container_data = self.coordinator.get_docker_data(self._container_id)
-        if not container_data:
-            return {}
-
-        container_info = container_data.get("system_info", {})
-
-        return {
-            "container_id": self._container_id,
-            "container_name": container_info.get("name"),
-            "image": container_info.get("image"),
-            "status": container_info.get("status"),
-            "created": container_info.get("created"),
-            "updated": container_info.get("updated"),
-            "ports": container_info.get("ports"),
-            "labels": container_info.get("labels"),
-        }
+        container = self.coordinator.get_docker_data(self._container_id)
+        return bool(container and container.get("running"))
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        container_data = self.coordinator.get_docker_data(self._container_id)
-        is_available = container_data is not None
-
-        _LOGGER.debug(
-            "DEBUG: Binary sensor %s available check: %s",
-            self._container_id,
-            is_available,
+        container = self.coordinator.get_docker_data(self._container_id)
+        parent = (
+            self.coordinator.get_system_data(container["system_id"])
+            if container
+            else None
+        )
+        return bool(
+            self.coordinator.last_update_success
+            and container
+            and parent
+            and not parent.get("stale")
+            and parent.get("status") == "up"
+            and (not container.get("stale") or container.get("status") == "missing")
         )
 
-        return is_available
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        container = self.coordinator.get_docker_data(self._container_id)
+        if not container:
+            return None
+        return {
+            "container_id": self._container_id,
+            "system_id": container.get("system_id"),
+            "status": container.get("status"),
+            "health": container.get("health"),
+            "image": container.get("image"),
+            "ports": container.get("ports"),
+            "last_updated": container.get("updated"),
+        }

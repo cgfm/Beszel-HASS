@@ -1,4 +1,4 @@
-"""Device registry and entity management for Beszel integration."""
+"""Device and registry helpers for Beszel."""
 
 from __future__ import annotations
 
@@ -7,154 +7,311 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import Entity
 
-from .const import DOMAIN
+from .const import (
+    DOCKER_SENSOR_DESCRIPTIONS,
+    DOMAIN,
+    EXTRA_DISK_SENSOR_DESCRIPTIONS,
+    SMART_SENSOR_DESCRIPTIONS,
+    SYSTEM_SENSOR_DESCRIPTIONS,
+)
+from .coordinator import BeszelDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def build_unique_id_prefixes(coordinator_data: dict[str, Any]) -> set[str]:
-    """Build set of unique ID prefixes from coordinator data.
+def entity_unique_id(
+    coordinator: BeszelDataUpdateCoordinator,
+    kind: str,
+    record_id: str,
+    metric: str,
+) -> str:
+    """Return a stable, hub-scoped entity unique ID."""
+    return f"{coordinator.namespace}:{kind}:{record_id}:{metric}"
 
-    This generates all possible unique ID prefixes that should exist based on
-    the current coordinator data, accounting for different entity unique ID formats.
 
-    Args:
-        coordinator_data: The coordinator.data dict containing system and container info
-
-    Returns:
-        Set of unique ID prefixes that should exist
-    """
-    prefixes = set()
-
-    for system_data in coordinator_data.values():
-        if "system_info" not in system_data:
-            continue
-
-        system_info = system_data["system_info"]
-        system_id = system_info.get("id")
-        data_type = system_data.get("type", "system")
-
-        if not system_id:
-            continue
-
-        if data_type == "docker":
-            # Docker containers have two different unique ID formats:
-            # Binary sensors: "docker_{container_id}_status_v4"
-            prefixes.add(f"docker_{system_id}")
-
-            # Regular sensors: "{system_prefix}_docker_{container_id}_{sensor_type}_v5"
-            # We need to sanitize the system_name to match what sensors.py does
-            system_name = system_info.get("system_name", "Unknown System")
-            system_prefix = (
-                system_name.lower()
-                .replace(" ", "_")
-                .replace("(", "")
-                .replace(")", "")
-                .replace("-", "_")
-            )
-            prefixes.add(f"{system_prefix}_docker_{system_id}")
-        elif data_type == "smart":
-            # SMART devices use: "smart_{system_id}_{disk_id}_{sensor_type}_v1"
-            # The system_id in coordinator data for SMART is already "smart_{system_id}_{disk_id}"
-            # but we need to extract components for the prefix
-            disk_id = system_info.get("disk_id")
-            parent_system_id = system_info.get("system")
-            if disk_id and parent_system_id:
-                prefixes.add(f"smart_{parent_system_id}_{disk_id}")
-        else:
-            # Regular systems use: "{system_id}_{sensor_type}_v4"
-            prefixes.add(system_id)
-
-            # Extra filesystems use: "{system_id}_efs_{disk_name}_{sensor_type}_v1"
-            # Add prefixes for each extra filesystem
-            stats = system_data.get("stats", {})
-            efs_data = stats.get("efs", {})
-            if isinstance(efs_data, dict):
-                for disk_name in efs_data.keys():
-                    prefixes.add(f"{system_id}_efs_{disk_name}")
-
-    _LOGGER.debug("Built unique ID prefixes: %s", prefixes)
-    return prefixes
+def device_identifier(
+    coordinator: BeszelDataUpdateCoordinator, kind: str, record_id: str
+) -> tuple[str, str]:
+    """Return a stable, hub-scoped device identifier."""
+    return (DOMAIN, f"{coordinator.namespace}:{kind}:{record_id}")
 
 
 @callback
-def async_remove_stale_entities(
+def async_remove_entity(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    current_unique_id_prefixes: set[str],
+    platform: str,
+    entity: Entity,
 ) -> None:
-    """Remove entities for systems/containers that no longer exist.
+    """Remove an exact entity from both the registry and the running platform."""
+    registry = er.async_get(hass)
+    if entity.unique_id:
+        entity_id = registry.async_get_entity_id(platform, DOMAIN, entity.unique_id)
+        if entity_id:
+            registry.async_remove(entity_id)
+    if entity.hass is not None:
+        hass.async_create_task(entity.async_remove(force_remove=True))
 
-    Args:
-        hass: Home Assistant instance
-        entry: Config entry for this integration
-        current_unique_id_prefixes: Set of unique ID prefixes for currently existing entities.
-            For regular systems: the system_id itself (e.g., "abc123")
-            For Docker containers: "docker_{container_id}" (e.g., "docker_nginx_system1")
-    """
+
+@callback
+def async_remove_device_if_empty(
+    hass: HomeAssistant,
+    coordinator: BeszelDataUpdateCoordinator,
+    kind: str,
+    record_id: str,
+) -> None:
+    """Remove an exact Beszel device after its final entity is gone."""
     entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device(
+        identifiers={device_identifier(coordinator, kind, record_id)}
+    )
+    if device is None or er.async_entries_for_device(
+        entity_registry, device.id, include_disabled_entities=True
+    ):
+        return
+    device_registry.async_remove_device(device.id)
 
-    # Get all entities for this integration
-    entities_to_check = [
-        entity
-        for entity in entity_registry.entities.values()
-        if entity.config_entry_id == entry.entry_id
-    ]
 
-    _LOGGER.debug(
-        "Checking %d entities for staleness (current prefixes: %s)",
-        len(entities_to_check),
-        current_unique_id_prefixes,
+@callback
+def async_remove_empty_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove empty Beszel devices left behind by migration or disabled features."""
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    for device in list(
+        device_registry.devices.get_devices_for_config_entry_id(entry.entry_id)
+    ):
+        if not any(identifier[0] == DOMAIN for identifier in device.identifiers):
+            continue
+        if er.async_entries_for_device(
+            entity_registry, device.id, include_disabled_entities=True
+        ):
+            continue
+        device_registry.async_remove_device(device.id)
+
+
+def system_device_info(
+    coordinator: BeszelDataUpdateCoordinator, system: dict[str, Any]
+) -> DeviceInfo:
+    """Build device info for a monitored system."""
+    return DeviceInfo(
+        identifiers={device_identifier(coordinator, "system", system["id"])},
+        name=system["name"],
+        manufacturer="Beszel",
+        model="Monitored system",
+        sw_version=system.get("agent_version"),
+        configuration_url=coordinator.api.base_url,
     )
 
-    removed_count = 0
 
-    # Remove entities whose system/container no longer exists
-    for entity in entities_to_check:
-        if entity.unique_id is None:
-            continue
+def container_device_info(
+    coordinator: BeszelDataUpdateCoordinator, container: dict[str, Any]
+) -> DeviceInfo:
+    """Build device info for a Docker or Podman container."""
+    return DeviceInfo(
+        identifiers={device_identifier(coordinator, "container", container["id"])},
+        name=f"{container['name']} ({container['system_name']})",
+        manufacturer="Beszel",
+        model="Container",
+        via_device=device_identifier(coordinator, "system", container["system_id"]),
+        configuration_url=coordinator.api.base_url,
+    )
 
-        # Extract the system/container identifier from the unique_id
-        # Formats:
-        #   Regular system: "{system_id}_{sensor_type}_v4"
-        #   Docker (binary): "docker_{container_id}_status_v4"
-        #   Docker (sensor): "{system_prefix}_docker_{container_id}_{sensor_type}_v5"
-        #   SMART disk: "smart_{system_id}_{disk_id}_{sensor_type}_v1"
-        #   Extra disk: "{system_id}_efs_{disk_name}_{sensor_type}_v1"
 
-        should_remove = True
-
-        # Check if this unique_id matches any current system/container
-        for prefix in current_unique_id_prefixes:
-            if entity.unique_id.startswith(f"{prefix}_"):
-                should_remove = False
-                break
-
-        if should_remove:
-            _LOGGER.info(
-                "Removing stale entity: %s (unique_id: %s)",
-                entity.entity_id,
-                entity.unique_id,
-            )
-            entity_registry.async_remove(entity.entity_id)
-            removed_count += 1
-
-    if removed_count > 0:
-        _LOGGER.info("Removed %d stale entities", removed_count)
-    else:
-        _LOGGER.debug("No stale entities found")
+def smart_device_info(
+    coordinator: BeszelDataUpdateCoordinator, disk: dict[str, Any]
+) -> DeviceInfo:
+    """Build device info for one SMART disk."""
+    return DeviceInfo(
+        identifiers={device_identifier(coordinator, "smart", disk["id"])},
+        name=f"{disk['model']} ({disk['disk_id']})",
+        manufacturer="Beszel",
+        model=disk["model"],
+        via_device=device_identifier(coordinator, "system", disk["system_id"]),
+        configuration_url=coordinator.api.base_url,
+    )
 
 
 @callback
-def async_get_device_info(system_id: str, system_info: dict) -> dict:
-    """Get device information for a system."""
-    return {
-        "identifiers": {(DOMAIN, system_id)},
-        "name": system_info.get("name", f"System {system_id}"),
-        "manufacturer": "Beszel",
-        "model": "Server Monitor",
-        "sw_version": system_info.get("version"),
-        "configuration_url": None,  # Could be set to Beszel web interface
+def async_migrate_legacy_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BeszelDataUpdateCoordinator,
+) -> None:
+    """Migrate v1.1 unique IDs and remove the invalid disk-temperature entity."""
+    registry = er.async_get(hass)
+    mappings: dict[str, str] = {}
+    obsolete: set[str] = set()
+    expected: set[str] = set()
+
+    system_metric_map = {
+        "cpu": "cpu",
+        "cpu_cores": "cpu_cores",
+        "cpu_temp": "temperature",
+        "memory": "memory",
+        "disk": "disk",
+        "disk_total": "disk_total",
+        "disk_used": "disk_used",
+        "uptime": "uptime",
+        "bandwidth": "bandwidth",
+        "load_1": "load_1",
+        "load_5": "load_5",
+        "load_15": "load_15",
+        "gpu": "gpu",
+        "battery": "battery",
+        "disk_read": "disk_read",
+        "disk_write": "disk_write",
+        "network_sent": "network_sent",
+        "network_recv": "network_received",
+        "memory_used": "memory_used",
+        "memory_total": "memory_total",
+        "memory_buffered": "memory_buffered",
+        "swap_used": "swap_used",
+        "swap_total": "swap_total",
+        "ip": "ip",
     }
+    for system_id, system in coordinator.systems.items():
+        for old_metric, new_metric in system_metric_map.items():
+            new_unique_id = entity_unique_id(
+                coordinator, "system", system_id, new_metric
+            )
+            mappings[f"{system_id}_{old_metric}_v4"] = new_unique_id
+            expected.add(new_unique_id)
+        status_unique_id = entity_unique_id(coordinator, "system", system_id, "status")
+        mappings[f"{system_id}_status_v4"] = status_unique_id
+        expected.add(status_unique_id)
+        obsolete.add(f"{system_id}_disk_temp_v4")
+        for filesystem in system.get("filesystems", {}):
+            for metric in ("usage", "total", "used", "read", "write"):
+                new_unique_id = entity_unique_id(
+                    coordinator,
+                    "filesystem",
+                    f"{system_id}:{filesystem}",
+                    metric,
+                )
+                mappings[f"{system_id}_efs_{filesystem}_{metric}_v1"] = new_unique_id
+                expected.add(new_unique_id)
+
+    for container_id, container in coordinator.containers.items():
+        legacy_ids = {
+            container_id,
+            f"{container['system_name']}_{container['name']}",
+        }
+        for legacy_id in legacy_ids:
+            for metric in ("cpu", "memory", "network_sent", "network_received"):
+                new_unique_id = entity_unique_id(
+                    coordinator, "container", container_id, metric
+                )
+                mappings[f"docker_{legacy_id}_{metric}_v4"] = new_unique_id
+                expected.add(new_unique_id)
+            status_unique_id = entity_unique_id(
+                coordinator, "container", container_id, "status"
+            )
+            mappings[f"docker_{legacy_id}_status_v4"] = status_unique_id
+            expected.add(status_unique_id)
+
+    for disk_id, disk in coordinator.smart_devices.items():
+        for metric in (
+            "health",
+            "temperature",
+            "reallocated_sectors",
+            "pending_sectors",
+            "uncorrectable_sectors",
+            "power_on_hours",
+        ):
+            new_unique_id = entity_unique_id(coordinator, "smart", disk_id, metric)
+            mappings[f"smart_{disk['system_id']}_{disk['disk_id']}_{metric}_v1"] = (
+                new_unique_id
+            )
+            expected.add(new_unique_id)
+
+    # Include all descriptions independently of the legacy mapping tables so a
+    # changed endpoint can retain compatible v2 entities and discard the rest.
+    for system_id, system in coordinator.systems.items():
+        expected.update(
+            entity_unique_id(coordinator, "system", system_id, description.key)
+            for description in SYSTEM_SENSOR_DESCRIPTIONS
+        )
+        expected.update(
+            entity_unique_id(
+                coordinator,
+                "filesystem",
+                f"{system_id}:{filesystem}",
+                description.key,
+            )
+            for filesystem in system.get("filesystems", {})
+            for description in EXTRA_DISK_SENSOR_DESCRIPTIONS
+        )
+    for container_id in coordinator.containers:
+        expected.update(
+            entity_unique_id(coordinator, "container", container_id, description.key)
+            for description in DOCKER_SENSOR_DESCRIPTIONS
+        )
+    for disk_id in coordinator.smart_devices:
+        expected.update(
+            entity_unique_id(coordinator, "smart", disk_id, description.key)
+            for description in SMART_SENSOR_DESCRIPTIONS
+        )
+
+    for entity in list(registry.entities.values()):
+        if entity.config_entry_id != entry.entry_id or not entity.unique_id:
+            continue
+        if entity.unique_id in obsolete:
+            registry.async_remove(entity.entity_id)
+            continue
+        new_unique_id = mappings.get(entity.unique_id)
+        namespace, separator, suffix = entity.unique_id.partition(":")
+        if (
+            new_unique_id is None
+            and separator
+            and namespace != coordinator.namespace
+            and len(namespace) == 12
+            and all(char in "0123456789abcdef" for char in namespace)
+            and suffix.split(":", 1)[0]
+            in {"system", "filesystem", "container", "smart"}
+        ):
+            candidate = f"{coordinator.namespace}:{suffix}"
+            if candidate in expected:
+                new_unique_id = candidate
+            else:
+                registry.async_remove(entity.entity_id)
+                continue
+        if new_unique_id is None or new_unique_id == entity.unique_id:
+            continue
+        platform = entity.entity_id.split(".", 1)[0]
+        existing = registry.async_get_entity_id(platform, DOMAIN, new_unique_id)
+        if existing and existing != entity.entity_id:
+            existing_entry = registry.async_get(existing)
+            if existing_entry and existing_entry.config_entry_id == entry.entry_id:
+                registry.async_remove(entity.entity_id)
+                continue
+            _LOGGER.warning(
+                "Cannot migrate %s because %s already owns the target unique ID",
+                entity.entity_id,
+                existing,
+            )
+            continue
+        registry.async_update_entity(entity.entity_id, new_unique_id=new_unique_id)
+
+
+@callback
+def async_remove_docker_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BeszelDataUpdateCoordinator,
+) -> None:
+    """Remove only entities known to belong to disabled Docker support."""
+    registry = er.async_get(hass)
+    prefix = f"{coordinator.namespace}:container:"
+    for entity in list(registry.entities.values()):
+        if entity.config_entry_id != entry.entry_id or not entity.unique_id:
+            continue
+        if entity.unique_id.startswith(prefix) or entity.unique_id.startswith(
+            "docker_"
+        ):
+            registry.async_remove(entity.entity_id)
+    async_remove_empty_devices(hass, entry)

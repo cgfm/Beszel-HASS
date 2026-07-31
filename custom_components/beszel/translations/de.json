@@ -2,41 +2,110 @@
   "config": {
     "step": {
       "user": {
-        "title": "Beszel Konfiguration",
-        "description": "Konfigurieren Sie Ihre Beszel-Instanz",
+        "title": "Mit Beszel verbinden",
+        "description": "Gib den lokalen Beszel-Hub und die Zugangsdaten eines Benutzers ein, der die überwachten Systeme lesen darf. Verwende HTTPS, sobald die Verbindung ein vertrauenswürdiges Netz verlässt.",
         "data": {
-          "host": "Host/IP-Adresse",
+          "host": "Host oder IP-Adresse",
           "port": "Port",
-          "ssl": "SSL verwenden",
-          "username": "Benutzername",
+          "use_ssl": "HTTPS verwenden",
+          "username": "E-Mail-Adresse oder Benutzername",
           "password": "Passwort",
-          "include_docker": "Docker-Container überwachen"
+          "include_docker": "Container überwachen",
+          "scan_interval": "Aktualisierungsintervall (Sekunden)"
+        },
+        "data_description": {
+          "host": "Ohne http://, https://, Port oder Pfad.",
+          "scan_interval": "Zwischen 10 und 3600 Sekunden."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Beszel erneut authentifizieren",
+        "description": "Beszel akzeptiert die gespeicherten Zugangsdaten nicht mehr.",
+        "data": {
+          "username": "E-Mail-Adresse oder Benutzername",
+          "password": "Passwort"
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen. Überprüfen Sie Host und Port.",
-      "invalid_auth": "Ungültige Anmeldedaten. Überprüfen Sie Benutzername und Passwort.",
-      "unknown": "Ein unbekannter Fehler ist aufgetreten."
+      "cannot_connect": "Verbindung zu Beszel oder Lesen der Systeme fehlgeschlagen.",
+      "invalid_auth": "Beszel hat die angegebenen Zugangsdaten abgelehnt.",
+      "invalid_input": "Prüfe den Host und alle eingegebenen Werte.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
-      "already_configured": "Dieser Beszel-Server ist bereits konfiguriert."
+      "already_configured": "Dieser Beszel-Endpunkt ist bereits konfiguriert.",
+      "reauth_successful": "Die erneute Authentifizierung war erfolgreich."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Beszel Optionen",
-        "description": "Konfigurieren Sie die Optionen für Ihre Beszel-Integration",
+        "title": "Beszel-Optionen",
+        "description": "Änderungen werden vor dem Neuladen der Integration geprüft.",
         "data": {
-          "host": "Host/IP-Adresse",
+          "host": "Host oder IP-Adresse",
           "port": "Port",
-          "ssl": "SSL verwenden",
-          "username": "Benutzername",
+          "use_ssl": "HTTPS verwenden",
+          "username": "E-Mail-Adresse oder Benutzername",
           "password": "Passwort",
-          "include_docker": "Docker-Container überwachen"
+          "include_docker": "Container überwachen",
+          "scan_interval": "Aktualisierungsintervall (Sekunden)"
+        },
+        "data_description": {
+          "host": "Ohne http://, https://, Port oder Pfad.",
+          "scan_interval": "Zwischen 10 und 3600 Sekunden."
         }
       }
+    },
+    "error": {
+      "cannot_connect": "Verbindung zu Beszel oder Lesen der Systeme fehlgeschlagen.",
+      "invalid_auth": "Beszel hat die angegebenen Zugangsdaten abgelehnt.",
+      "invalid_input": "Prüfe den Host und alle eingegebenen Werte.",
+      "already_configured": "Dieser Beszel-Endpunkt ist bereits konfiguriert.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_usage": { "name": "CPU-Auslastung" },
+      "cpu_cores": { "name": "CPU-Kerne" },
+      "temperature": { "name": "Temperatur" },
+      "memory_usage": { "name": "Arbeitsspeicherauslastung" },
+      "disk_usage": { "name": "Datenträgerauslastung" },
+      "disk_total": { "name": "Datenträger gesamt" },
+      "disk_used": { "name": "Datenträger belegt" },
+      "uptime": { "name": "Betriebszeit" },
+      "bandwidth": { "name": "Bandbreite" },
+      "load_1": { "name": "Lastmittel 1 Minute" },
+      "load_5": { "name": "Lastmittel 5 Minuten" },
+      "load_15": { "name": "Lastmittel 15 Minuten" },
+      "gpu_usage": { "name": "GPU-Auslastung" },
+      "battery": { "name": "Akku" },
+      "disk_read": { "name": "Datenträger-Leserate" },
+      "disk_write": { "name": "Datenträger-Schreibrate" },
+      "network_sent": { "name": "Netzwerk gesendet" },
+      "network_received": { "name": "Netzwerk empfangen" },
+      "memory_used": { "name": "Arbeitsspeicher belegt" },
+      "memory_total": { "name": "Arbeitsspeicher gesamt" },
+      "memory_buffered": { "name": "Arbeitsspeicher Puffer/Cache" },
+      "swap_used": { "name": "Auslagerung belegt" },
+      "swap_total": { "name": "Auslagerung gesamt" },
+      "ip_address": { "name": "IP-Adresse" },
+      "filesystem_usage": { "name": "{disk} Auslastung" },
+      "filesystem_total": { "name": "{disk} gesamt" },
+      "filesystem_used": { "name": "{disk} belegt" },
+      "filesystem_read": { "name": "{disk} Leserate" },
+      "filesystem_write": { "name": "{disk} Schreibrate" },
+      "smart_health": { "name": "SMART-Zustand" },
+      "smart_temperature": { "name": "Temperatur" },
+      "smart_reallocated_sectors": { "name": "Neu zugewiesene Sektoren" },
+      "smart_pending_sectors": { "name": "Ausstehende Sektoren" },
+      "smart_uncorrectable_sectors": { "name": "Nicht korrigierbare Sektoren" },
+      "smart_power_on_hours": { "name": "Betriebsstunden" }
+    },
+    "binary_sensor": {
+      "status": { "name": "Status" }
     }
   }
 }
