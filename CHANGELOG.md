@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- Grouped SMART disk entities under their corresponding monitored system again
+  instead of exposing every disk as a separate device.
+
 ## 1.2.0
 
 - Rebuilt API authentication, bounded concurrency, pagination, validation, and

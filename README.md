@@ -65,9 +65,9 @@ match.
 
 System devices expose CPU, memory, disk, load, GPU, battery, temperature, uptime,
 bandwidth, disk I/O, network I/O, memory/swap sizes, IP address, and connectivity
-where Beszel supplies the value. Extra filesystems add usage, size, and I/O sensors.
-SMART records create separate disk devices with health, temperature, sector counts,
-and power-on hours.
+where Beszel supplies the value. Extra filesystems add usage, size, and I/O sensors
+to their corresponding system device. SMART records add health, temperature, sector
+counts, and power-on hours to that same system device.
 
 Container devices expose:
 
@@ -112,8 +112,8 @@ isort --check-only custom_components/beszel/*.py tests/*.py create_release.py
 pytest -v
 ```
 
-The release archive is created with `python create_release.py`. Changes in version
-1.2.0 are listed in [CHANGELOG.md](CHANGELOG.md).
+The release archive is created with `python create_release.py`. Release changes are
+listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

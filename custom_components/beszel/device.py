@@ -125,14 +125,9 @@ def container_device_info(
 def smart_device_info(
     coordinator: BeszelDataUpdateCoordinator, disk: dict[str, Any]
 ) -> DeviceInfo:
-    """Build device info for one SMART disk."""
+    """Link one SMART disk's entities to its monitored system device."""
     return DeviceInfo(
-        identifiers={device_identifier(coordinator, "smart", disk["id"])},
-        name=f"{disk['model']} ({disk['disk_id']})",
-        manufacturer="Beszel",
-        model=disk["model"],
-        via_device=device_identifier(coordinator, "system", disk["system_id"]),
-        configuration_url=coordinator.api.base_url,
+        identifiers={device_identifier(coordinator, "system", disk["system_id"])},
     )
 
 

@@ -52,9 +52,9 @@ config/
 5. Submit the form. The connection and system access are validated before the entry
    is saved.
 
-After setup, systems appear as devices. Current containers and SMART disks receive
-their own child devices. Newly discovered inventory is added without reloading the
-integration.
+After setup, systems appear as devices. Filesystem and SMART entities are grouped
+under their corresponding system; current containers receive their own child
+devices. Newly discovered inventory is added without reloading the integration.
 
 ## Change options
 
