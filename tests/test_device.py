@@ -1,9 +1,16 @@
 """Tests for Beszel device grouping."""
 
+import importlib
+from pathlib import Path
+import sys
 from types import SimpleNamespace
 import unittest
 
-from custom_components.beszel.device import smart_device_info
+ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT))
+smart_device_info = importlib.import_module(
+    "custom_components.beszel.device"
+).smart_device_info
 
 
 class SmartDeviceInfoTests(unittest.TestCase):
