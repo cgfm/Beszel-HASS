@@ -1,7 +1,7 @@
 """Tests for Beszel device grouping."""
 
-import unittest
 from types import SimpleNamespace
+import unittest
 
 from custom_components.beszel.device import smart_device_info
 
