@@ -143,6 +143,26 @@ def normalize_extra_filesystems(stats: dict[str, Any]) -> dict[str, dict[str, An
     return normalized
 
 
+def normalize_system_status_counts(info: Any) -> dict[str, int | None]:
+    """Normalize optional service and package-update counts from Beszel."""
+    if not isinstance(info, dict):
+        info = {}
+
+    def count(field: str, index: int) -> int | None:
+        values = info.get(field)
+        if not isinstance(values, list) or len(values) <= index:
+            return None
+        value = values[index]
+        return value if type(value) is int and value >= 0 else None
+
+    return {
+        "services_total": count("sv", 0),
+        "services_failed": count("sv", 1),
+        "updates_total": count("pu", 0),
+        "updates_security": count("pu", 1),
+    }
+
+
 def normalize_system(
     system: dict[str, Any],
     stats: dict[str, Any],
