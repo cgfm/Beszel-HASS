@@ -99,6 +99,30 @@ class SystemNormalizationTests(unittest.TestCase):
         self.assertEqual(metrics["disk_read"], 4_194_304)
         self.assertEqual(metrics["disk_write"], 5_242_880)
 
+    def test_per_sensor_temperatures_are_normalized(self) -> None:
+        system = {"id": "system123", "name": "pve1", "info": {"dt": 88.8}}
+        stats = {
+            "t": {
+                "k10temp_tctl": 87.13,
+                "nvme_composite": "44.85",
+                "zero": 0,
+                "broken": None,
+                "text": "n/a",
+                42: 12,
+            }
+        }
+        normalized = models.normalize_system(system, stats)
+        self.assertEqual(
+            normalized["temperatures"],
+            {"k10temp_tctl": 87.1, "nvme_composite": 44.9, "zero": 0.0},
+        )
+        # The aggregated dashboard sensor keeps its own value.
+        self.assertEqual(normalized["metrics"]["temperature"], 88.8)
+
+    def test_temperatures_default_to_empty_dict(self) -> None:
+        self.assertEqual(models.normalize_temperatures({}), {})
+        self.assertEqual(models.normalize_temperatures({"t": [1, 2]}), {})
+
     def test_omitted_zero_rates_remain_available(self) -> None:
         system = {"id": "system123", "info": {"bb": 0}}
         stats = {

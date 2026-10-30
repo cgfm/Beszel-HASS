@@ -23,11 +23,13 @@ CONF_USERNAME: Final = "username"
 CONF_PASSWORD: Final = "password"
 CONF_SSL: Final = "use_ssl"
 CONF_INCLUDE_DOCKER: Final = "include_docker"
+CONF_INCLUDE_TEMPERATURE_SENSORS: Final = "include_temperature_sensors"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 
 DEFAULT_PORT: Final = 8090
 DEFAULT_SSL: Final = False
 DEFAULT_INCLUDE_DOCKER: Final = True
+DEFAULT_INCLUDE_TEMPERATURE_SENSORS: Final = False
 DEFAULT_SCAN_INTERVAL: Final = 30
 MIN_SCAN_INTERVAL: Final = 10
 MAX_SCAN_INTERVAL: Final = 3600
@@ -289,6 +291,17 @@ EXTRA_DISK_SENSOR_DESCRIPTIONS: Final = (
         icon="mdi:arrow-up-bold",
         native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
         device_class=SensorDeviceClass.DATA_RATE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+)
+
+TEMPERATURE_SENSOR_DESCRIPTIONS: Final = (
+    SensorEntityDescription(
+        key="value",
+        translation_key="temperature_sensor",
+        icon="mdi:thermometer",
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
 )
