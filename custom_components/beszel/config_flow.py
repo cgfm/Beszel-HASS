@@ -21,12 +21,14 @@ from .api import BeszelAPIClient, BeszelAPIError, BeszelAuthError
 from .const import (
     CONF_HOST,
     CONF_INCLUDE_DOCKER,
+    CONF_INCLUDE_TEMPERATURE_SENSORS,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SSL,
     CONF_USERNAME,
     DEFAULT_INCLUDE_DOCKER,
+    DEFAULT_INCLUDE_TEMPERATURE_SENSORS,
     DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SSL,
@@ -60,6 +62,13 @@ def _schema(
             default=values.get(CONF_INCLUDE_DOCKER, DEFAULT_INCLUDE_DOCKER),
         ): bool,
         vol.Required(
+            CONF_INCLUDE_TEMPERATURE_SENSORS,
+            default=values.get(
+                CONF_INCLUDE_TEMPERATURE_SENSORS,
+                DEFAULT_INCLUDE_TEMPERATURE_SENSORS,
+            ),
+        ): bool,
+        vol.Required(
             CONF_SCAN_INTERVAL,
             default=values.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         ): vol.All(
@@ -83,6 +92,9 @@ def normalize_input(data: dict[str, Any]) -> dict[str, Any]:
     normalized[CONF_PORT] = int(data.get(CONF_PORT, DEFAULT_PORT))
     normalized[CONF_SSL] = bool(data.get(CONF_SSL, DEFAULT_SSL))
     normalized[CONF_USERNAME] = str(data[CONF_USERNAME]).strip()
+    normalized[CONF_INCLUDE_TEMPERATURE_SENSORS] = bool(
+        data.get(CONF_INCLUDE_TEMPERATURE_SENSORS, DEFAULT_INCLUDE_TEMPERATURE_SENSORS)
+    )
     normalized[CONF_SCAN_INTERVAL] = int(
         data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
     )
