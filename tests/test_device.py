@@ -95,6 +95,21 @@ class ContainerIdentityMapTests(unittest.TestCase):
 
         self.assertEqual(device.container_identity_map(coordinator), {})
 
+    def test_only_the_current_runtime_id_is_known(self) -> None:
+        """A device created before a recreate still holds the old runtime ID."""
+        identity = "container-4f2a1c9e77b0"
+        coordinator = SimpleNamespace(
+            namespace="hub123",
+            containers={identity: container(identity, "9c1b4a77e120")},
+        )
+
+        identities = device.container_identity_map(coordinator)
+
+        self.assertEqual(
+            identities, {"container:9c1b4a77e120": f"container:{identity}"}
+        )
+        self.assertNotIn("container:ae6711c0fa60", identities)
+
     def test_incomplete_records_are_skipped(self) -> None:
         coordinator = SimpleNamespace(
             namespace="hub123",

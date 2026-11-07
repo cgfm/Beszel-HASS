@@ -345,29 +345,52 @@ def async_migrate_legacy_entities(
 @callback
 def async_migrate_container_devices(
     hass: HomeAssistant,
+    entry: ConfigEntry,
     coordinator: BeszelDataUpdateCoordinator,
 ) -> None:
     """Re-point container devices at their stable identity.
 
-    Registering the identity as a new identifier would otherwise create a second
-    device and drop the first one's area, name and labels.
+    The device is reached through the entity that already lives on it. Its stored
+    identifier holds the runtime container ID the Hub reported when the device was
+    created, which every later recreate replaces, so looking the device up by that
+    ID misses every container that has been replaced since. Registering the
+    identity as a new identifier instead would create a second device and drop the
+    first one's area, name and labels.
     """
+    entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     identities = container_identity_map(coordinator)
     if not identities:
         return
-    for identity, container in coordinator.containers.items():
-        record_id = container.get("id")
-        if not isinstance(record_id, str) or not record_id or record_id == identity:
+
+    # Entity unique IDs were just migrated, so the prefix identifies the container.
+    wanted: dict[str, str] = {}
+    for segment in identities.values():
+        identity = segment.partition(":")[2]
+        wanted[f"{coordinator.namespace}:container:{identity}"] = identity
+    taken = {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for identifier in device.identifiers
+    }
+
+    for registry_entry in list(entity_registry.entities.values()):
+        if registry_entry.config_entry_id != entry.entry_id:
             continue
-        previous = device_identifier(coordinator, "container", record_id)
+        if not registry_entry.unique_id or not registry_entry.device_id:
+            continue
+        prefix, separator, _ = registry_entry.unique_id.rpartition(":")
+        identity = wanted.get(prefix) if separator else None
+        if identity is None:
+            continue
         stable = device_identifier(coordinator, "container", identity)
-        device = device_registry.async_get_device(identifiers={previous})
-        if device is None:
+        if stable in taken:
             continue
-        if device_registry.async_get_device(identifiers={stable}) is not None:
+        device = device_registry.async_get(registry_entry.device_id)
+        if device is None or device.identifiers == {stable}:
             continue
         device_registry.async_update_device(device.id, new_identifiers={stable})
+        taken.add(stable)
 
 
 @callback

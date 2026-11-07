@@ -71,7 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     async_migrate_legacy_entities(hass, entry, coordinator)
-    async_migrate_container_devices(hass, coordinator)
+    async_migrate_container_devices(hass, entry, coordinator)
     if not coordinator.is_docker_enabled():
         async_remove_docker_entities(hass, entry, coordinator)
 
