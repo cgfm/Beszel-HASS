@@ -188,18 +188,88 @@ class ContainerAndSmartNormalizationTests(unittest.TestCase):
             models.container_identity("sys-b", "app"),
         )
 
-    def test_two_live_containers_with_one_name_keep_both(self) -> None:
+    def test_recreate_reported_twice_collapses_to_one_container(self) -> None:
+        """The Hub lists a replaced container and its replacement under one name."""
         containers = models.normalize_containers(
             [
-                {"id": "aaa111", "system": "sys-a", "name": "app"},
-                {"id": "bbb222", "system": "sys-a", "name": "app"},
+                {  # the replaced container, still listed with its old uptime
+                    "id": "2f8fe5734408",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "up 22 hours",
+                    "updated": "2026-11-07T17:04:53Z",
+                },
+                {  # its replacement, reported a minute later
+                    "id": "ee59508b07ea",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "up 8 minutes",
+                    "updated": "2026-11-07T17:13:53Z",
+                },
             ],
             [],
             {"sys-a": "One"},
         )
-        self.assertEqual(len(containers), 2)
-        identity = models.container_identity("sys-a", "app")
-        self.assertEqual(sorted(containers), sorted([identity, f"{identity}-bbb222"]))
+
+        (identity,) = containers
+        self.assertEqual(identity, models.container_identity("sys-a", "app"))
+        # Neither runtime ID leaks into the identity, and the live record wins.
+        self.assertNotIn("ee59508b07ea", identity)
+        self.assertNotIn("2f8fe5734408", identity)
+        self.assertEqual(containers[identity]["id"], "ee59508b07ea")
+        self.assertEqual(containers[identity]["status"], "up 8 minutes")
+
+    def test_a_running_record_outranks_a_stopped_one(self) -> None:
+        containers = models.normalize_containers(
+            [
+                {
+                    "id": "fresh-but-stopped",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "exited",
+                    "updated": "2026-11-07T17:20:00Z",
+                },
+                {
+                    "id": "running",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "up 3 days",
+                    "updated": "2026-11-07T17:00:00Z",
+                },
+            ],
+            [],
+            {"sys-a": "One"},
+        )
+
+        (identity,) = containers
+        self.assertEqual(containers[identity]["id"], "running")
+
+    def test_same_name_records_collapse_even_when_both_are_running(self) -> None:
+        """One name in one system is one container, whichever record is fresher."""
+        containers = models.normalize_containers(
+            [
+                {
+                    "id": "aaa111",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "up 5 days",
+                    "updated": "2026-11-07T17:13:15Z",
+                },
+                {
+                    "id": "bbb222",
+                    "system": "sys-a",
+                    "name": "app",
+                    "status": "up 17 seconds",
+                    "updated": "2026-11-07T17:14:15Z",
+                },
+            ],
+            [],
+            {"sys-a": "One"},
+        )
+
+        (identity,) = containers
+        self.assertEqual(identity, models.container_identity("sys-a", "app"))
+        self.assertEqual(containers[identity]["id"], "bbb222")
 
     def test_legacy_container_gets_collision_resistant_id(self) -> None:
         containers = models.normalize_containers(
