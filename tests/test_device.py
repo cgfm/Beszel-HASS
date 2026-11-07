@@ -122,6 +122,29 @@ class ContainerIdentityMapTests(unittest.TestCase):
 
         self.assertEqual(device.container_identity_map(coordinator), {})
 
+    def test_known_segments_cover_current_and_superseded_ids(self) -> None:
+        """The sweep must keep every identity that can still own entities."""
+        identity = "container-4f2a1c9e77b0"
+        legacy = "legacy-9f5c1a2b3c4d"
+        coordinator = SimpleNamespace(
+            namespace="hub123",
+            containers={
+                identity: {"key": identity, "id": "9c1b4a77e120"},
+                legacy: {"key": legacy, "id": legacy},
+            },
+        )
+
+        segments = device.container_identity_segments(coordinator)
+
+        self.assertEqual(
+            segments,
+            {
+                f"container:{identity}",
+                f"container:{legacy}",
+                "container:9c1b4a77e120",
+            },
+        )
+
 
 class ContainerInventoryMergeTests(unittest.TestCase):
     """A recreated container must not leave a second entity or device behind."""

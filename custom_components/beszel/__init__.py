@@ -22,6 +22,7 @@ from .device import (
     async_migrate_legacy_entities,
     async_remove_docker_entities,
     async_remove_empty_devices,
+    async_remove_stale_container_entities,
 )
 from .models import hub_unique_id, normalize_host
 
@@ -72,6 +73,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     async_migrate_legacy_entities(hass, entry, coordinator)
     async_migrate_container_devices(hass, entry, coordinator)
+    async_remove_stale_container_entities(hass, entry, coordinator)
     if not coordinator.is_docker_enabled():
         async_remove_docker_entities(hass, entry, coordinator)
 

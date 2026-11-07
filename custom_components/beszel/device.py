@@ -163,6 +163,19 @@ def container_identity_map(
     return identities
 
 
+def container_identity_segments(
+    coordinator: BeszelDataUpdateCoordinator,
+) -> set[str]:
+    """Return every container identity segment that may still own entities.
+
+    The current identities, plus the runtime container ID segments that are being
+    migrated onto them.
+    """
+    segments = {f"container:{identity}" for identity in coordinator.containers}
+    segments.update(container_identity_map(coordinator))
+    return segments
+
+
 @callback
 def async_migrate_legacy_entities(
     hass: HomeAssistant,
@@ -391,6 +404,40 @@ def async_migrate_container_devices(
             continue
         device_registry.async_update_device(device.id, new_identifiers={stable})
         taken.add(stable)
+
+
+@callback
+def async_remove_stale_container_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BeszelDataUpdateCoordinator,
+) -> None:
+    """Remove container entities whose identity no longer exists.
+
+    The platform managers only retire entities they created themselves, so an
+    entity left behind by an earlier container identity - for example one keyed on
+    a runtime container ID that has since been replaced - would stay unavailable
+    for good and keep its long-term statistics stranded. Skipped when the Hub
+    reports no containers, so a failed poll can never mass-remove entities.
+    """
+    if not coordinator.containers:
+        return
+    registry = er.async_get(hass)
+    known = container_identity_segments(coordinator)
+    stale_devices: set[str] = set()
+    for entity in list(registry.entities.values()):
+        if entity.config_entry_id != entry.entry_id or not entity.unique_id:
+            continue
+        namespace, separator, suffix = entity.unique_id.partition(":")
+        if not separator or namespace != coordinator.namespace:
+            continue
+        segment, inner, _ = suffix.rpartition(":")
+        if not inner or not segment.startswith("container:") or segment in known:
+            continue
+        stale_devices.add(segment.partition(":")[2])
+        registry.async_remove(entity.entity_id)
+    for identity in stale_devices:
+        async_remove_device_if_empty(hass, coordinator, "container", identity)
 
 
 @callback
