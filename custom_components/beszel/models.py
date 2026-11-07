@@ -113,6 +113,27 @@ def _gpu_usage(info: dict[str, Any], stats: dict[str, Any]) -> float | int | Non
     return 0 if any(isinstance(gpu, dict) for gpu in gpu_data.values()) else None
 
 
+def _identity_digest(system_id: str, name: str) -> str:
+    """Return the collision-resistant digest behind a container identity."""
+    return sha256(f"{system_id}\0{name}".encode()).hexdigest()[:12]
+
+
+def container_identity(system_id: str, name: str) -> str:
+    """Return a container identity that survives a recreated container.
+
+    Beszel reports the mutable Docker/Podman runtime container ID, which changes
+    whenever the container is replaced (image update, ``compose up``, a redeploy
+    by Komodo/Portainer/Watchtower). The monitored system and the container name
+    stay the same, so they are what identifies one logical container over time.
+    """
+    return f"container-{_identity_digest(system_id, name)}"
+
+
+def _container_rank(container: dict[str, Any]) -> tuple[bool, str]:
+    """Rank duplicate records for one container name: running, then freshest."""
+    return (bool(container.get("running")), str(container.get("updated") or ""))
+
+
 def normalize_extra_filesystems(stats: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Normalize Beszel extra filesystem statistics."""
     normalized: dict[str, dict[str, Any]] = {}
@@ -288,7 +309,12 @@ def normalize_containers(
     system_stats_created: dict[str, str] | None = None,
     include_historical_only: bool = True,
 ) -> dict[str, dict[str, Any]]:
-    """Merge current container state with the latest historical metrics."""
+    """Merge current container state with the latest historical metrics.
+
+    Containers are keyed by their stable identity (see ``container_identity``),
+    never by the runtime container ID, so a recreated container keeps one entity,
+    one device and uninterrupted long-term statistics.
+    """
     history = _historical_containers(historical, system_stats_created or {})
     normalized: dict[str, dict[str, Any]] = {}
     seen: set[tuple[str, str]] = set()
@@ -297,15 +323,29 @@ def normalize_containers(
         system_id = state.get("system")
         name = state.get("name")
         record_id = state.get("id")
-        if not all(
-            isinstance(value, str) and value for value in (system_id, name, record_id)
+        if not (
+            isinstance(system_id, str)
+            and system_id
+            and isinstance(name, str)
+            and name
+            and isinstance(record_id, str)
+            and record_id
         ):
             continue
         raw = history.get((system_id, name), {})
         seen.add((system_id, name))
-        normalized[record_id] = _normalize_container(
-            record_id, system_id, name, system_names, state, raw
+        identity = container_identity(system_id, name)
+        record = _normalize_container(
+            identity, record_id, system_id, name, system_names, state, raw
         )
+        # A recreate makes the Hub list the replaced container and its
+        # replacement together under one name. That is one logical container, so
+        # collapse them: keep the running record, then the freshest one. Letting
+        # the runtime container ID in would give the container a second identity,
+        # a second entity and a second device on every recreate.
+        previous = normalized.get(identity)
+        if previous is None or _container_rank(record) > _container_rank(previous):
+            normalized[identity] = record
 
     if not include_historical_only:
         return normalized
@@ -313,9 +353,9 @@ def normalize_containers(
     for (system_id, name), raw in history.items():
         if (system_id, name) in seen:
             continue
-        digest = sha256(f"{system_id}\0{name}".encode()).hexdigest()[:12]
-        record_id = f"legacy-{digest}"
+        record_id = f"legacy-{_identity_digest(system_id, name)}"
         normalized[record_id] = _normalize_container(
+            record_id,
             record_id,
             system_id,
             name,
@@ -327,6 +367,7 @@ def normalize_containers(
 
 
 def _normalize_container(
+    identity: str,
     record_id: str,
     system_id: str,
     name: str,
@@ -334,6 +375,11 @@ def _normalize_container(
     state: dict[str, Any],
     raw: dict[str, Any],
 ) -> dict[str, Any]:
+    """Normalize one container record.
+
+    ``key`` is the stable identity used for entities and devices; ``id`` stays the
+    runtime container ID the Hub reported for this poll.
+    """
     bandwidth = raw.get("b")
     sent = _array_number(bandwidth, 0)
     received = _array_number(bandwidth, 1)
@@ -347,6 +393,7 @@ def _normalize_container(
         received = 0
     status = str(state.get("status") or "unknown").lower()
     return {
+        "key": identity,
         "id": record_id,
         "system_id": system_id,
         "system_name": system_names.get(system_id, system_id),
