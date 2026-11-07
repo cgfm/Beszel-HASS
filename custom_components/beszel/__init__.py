@@ -18,6 +18,7 @@ from .const import (
 )
 from .coordinator import BeszelDataUpdateCoordinator
 from .device import (
+    async_migrate_container_devices,
     async_migrate_legacy_entities,
     async_remove_docker_entities,
     async_remove_empty_devices,
@@ -70,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     async_migrate_legacy_entities(hass, entry, coordinator)
+    async_migrate_container_devices(hass, coordinator)
     if not coordinator.is_docker_enabled():
         async_remove_docker_entities(hass, entry, coordinator)
 
