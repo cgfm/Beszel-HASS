@@ -139,11 +139,67 @@ class ContainerAndSmartNormalizationTests(unittest.TestCase):
             ],
             {"system123": "Server"},
         )
-        container = containers["abc123"]
+        (identity,) = containers
+        self.assertEqual(identity, models.container_identity("system123", "nginx"))
+        container = containers[identity]
+        self.assertEqual(container["key"], identity)
+        self.assertEqual(container["id"], "abc123")
         self.assertTrue(container["running"])
         self.assertEqual(container["metrics"]["memory"], 12.5)
         self.assertEqual(container["metrics"]["network_sent"], 8)
         self.assertEqual(container["metrics"]["network_received"], 9)
+
+    def test_recreated_container_keeps_its_identity(self) -> None:
+        """A replaced container must not change entity, device or statistics ID."""
+
+        def snapshot(record_id: str) -> dict[str, dict[str, object]]:
+            return models.normalize_containers(
+                [
+                    {
+                        "id": record_id,
+                        "system": "system123",
+                        "name": "nginx",
+                        "status": "running",
+                    }
+                ],
+                [],
+                {"system123": "Server"},
+            )
+
+        before = snapshot("2f8fe5734408")
+        after = snapshot("9c1b4a77e120")
+        self.assertEqual(list(before), list(after))
+        (identity,) = after
+        self.assertEqual(before[identity]["id"], "2f8fe5734408")
+        self.assertEqual(after[identity]["id"], "9c1b4a77e120")
+
+    def test_same_name_on_two_systems_stays_distinct(self) -> None:
+        containers = models.normalize_containers(
+            [
+                {"id": "aaa111", "system": "sys-a", "name": "app"},
+                {"id": "bbb222", "system": "sys-b", "name": "app"},
+            ],
+            [],
+            {"sys-a": "One", "sys-b": "Two"},
+        )
+        self.assertEqual(len(containers), 2)
+        self.assertNotEqual(
+            models.container_identity("sys-a", "app"),
+            models.container_identity("sys-b", "app"),
+        )
+
+    def test_two_live_containers_with_one_name_keep_both(self) -> None:
+        containers = models.normalize_containers(
+            [
+                {"id": "aaa111", "system": "sys-a", "name": "app"},
+                {"id": "bbb222", "system": "sys-a", "name": "app"},
+            ],
+            [],
+            {"sys-a": "One"},
+        )
+        self.assertEqual(len(containers), 2)
+        identity = models.container_identity("sys-a", "app")
+        self.assertEqual(sorted(containers), sorted([identity, f"{identity}-bbb222"]))
 
     def test_legacy_container_gets_collision_resistant_id(self) -> None:
         containers = models.normalize_containers(
