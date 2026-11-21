@@ -156,24 +156,11 @@ def container_identity_map(
     """
     identities: dict[str, str] = {}
     for identity, container in coordinator.containers.items():
-        record_id = container.get("id")
-        if not isinstance(record_id, str) or not record_id or record_id == identity:
-            continue
-        identities[f"container:{record_id}"] = f"container:{identity}"
+        for record_id in container.get("record_ids", (container.get("id"),)):
+            if not isinstance(record_id, str) or not record_id or record_id == identity:
+                continue
+            identities[f"container:{record_id}"] = f"container:{identity}"
     return identities
-
-
-def container_identity_segments(
-    coordinator: BeszelDataUpdateCoordinator,
-) -> set[str]:
-    """Return every container identity segment that may still own entities.
-
-    The current identities, plus the runtime container ID segments that are being
-    migrated onto them.
-    """
-    segments = {f"container:{identity}" for identity in coordinator.containers}
-    segments.update(container_identity_map(coordinator))
-    return segments
 
 
 @callback
@@ -186,7 +173,8 @@ def async_migrate_legacy_entities(
 
     Container entities also move off the runtime container ID, which a recreate
     replaces, onto their stable identity, so a replaced container keeps its entity,
-    its device and its long-term statistics.
+    its device and its long-term statistics. Retain container entries with no
+    confirmed match in the first snapshot.
     """
     registry = er.async_get(hass)
     mappings: dict[str, str] = {}
@@ -314,14 +302,14 @@ def async_migrate_legacy_entities(
             continue
         new_unique_id = mappings.get(entity.unique_id)
         namespace, separator, suffix = entity.unique_id.partition(":")
+        kind = suffix.partition(":")[0]
         if (
             new_unique_id is None
             and separator
             and namespace != coordinator.namespace
             and len(namespace) == 12
             and all(char in "0123456789abcdef" for char in namespace)
-            and suffix.split(":", 1)[0]
-            in {"system", "filesystem", "container", "smart"}
+            and kind in {"system", "filesystem", "container", "smart"}
         ):
             candidate = f"{coordinator.namespace}:{suffix}"
             if candidate in expected:
@@ -334,7 +322,7 @@ def async_migrate_legacy_entities(
                 )
                 if replacement is not None and replacement in expected:
                     new_unique_id = replacement
-                else:
+                elif kind != "container":
                     registry.async_remove(entity.entity_id)
                     continue
         if new_unique_id is None or new_unique_id == entity.unique_id:
@@ -343,7 +331,11 @@ def async_migrate_legacy_entities(
         existing = registry.async_get_entity_id(platform, DOMAIN, new_unique_id)
         if existing and existing != entity.entity_id:
             existing_entry = registry.async_get(existing)
-            if existing_entry and existing_entry.config_entry_id == entry.entry_id:
+            if (
+                existing_entry
+                and existing_entry.config_entry_id == entry.entry_id
+                and new_unique_id.split(":", 2)[1] != "container"
+            ):
                 registry.async_remove(entity.entity_id)
                 continue
             _LOGGER.warning(
@@ -404,40 +396,6 @@ def async_migrate_container_devices(
             continue
         device_registry.async_update_device(device.id, new_identifiers={stable})
         taken.add(stable)
-
-
-@callback
-def async_remove_stale_container_entities(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    coordinator: BeszelDataUpdateCoordinator,
-) -> None:
-    """Remove container entities whose identity no longer exists.
-
-    The platform managers only retire entities they created themselves, so an
-    entity left behind by an earlier container identity - for example one keyed on
-    a runtime container ID that has since been replaced - would stay unavailable
-    for good and keep its long-term statistics stranded. Skipped when the Hub
-    reports no containers, so a failed poll can never mass-remove entities.
-    """
-    if not coordinator.containers:
-        return
-    registry = er.async_get(hass)
-    known = container_identity_segments(coordinator)
-    stale_devices: set[str] = set()
-    for entity in list(registry.entities.values()):
-        if entity.config_entry_id != entry.entry_id or not entity.unique_id:
-            continue
-        namespace, separator, suffix = entity.unique_id.partition(":")
-        if not separator or namespace != coordinator.namespace:
-            continue
-        segment, inner, _ = suffix.rpartition(":")
-        if not inner or not segment.startswith("container:") or segment in known:
-            continue
-        stale_devices.add(segment.partition(":")[2])
-        registry.async_remove(entity.entity_id)
-    for identity in stale_devices:
-        async_remove_device_if_empty(hass, coordinator, "container", identity)
 
 
 @callback

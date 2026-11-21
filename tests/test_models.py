@@ -217,6 +217,9 @@ class ContainerAndSmartNormalizationTests(unittest.TestCase):
         self.assertNotIn("ee59508b07ea", identity)
         self.assertNotIn("2f8fe5734408", identity)
         self.assertEqual(containers[identity]["id"], "ee59508b07ea")
+        self.assertEqual(
+            containers[identity]["record_ids"], ["2f8fe5734408", "ee59508b07ea"]
+        )
         self.assertEqual(containers[identity]["status"], "up 8 minutes")
 
     def test_a_running_record_outranks_a_stopped_one(self) -> None:

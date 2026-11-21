@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 from types import SimpleNamespace
 import unittest
+from unittest.mock import AsyncMock, Mock, patch
 
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT))
@@ -122,28 +123,104 @@ class ContainerIdentityMapTests(unittest.TestCase):
 
         self.assertEqual(device.container_identity_map(coordinator), {})
 
-    def test_known_segments_cover_current_and_superseded_ids(self) -> None:
-        """The sweep must keep every identity that can still own entities."""
+    def test_duplicate_records_both_map_to_the_stable_identity(self) -> None:
         identity = "container-4f2a1c9e77b0"
-        legacy = "legacy-9f5c1a2b3c4d"
         coordinator = SimpleNamespace(
-            namespace="hub123",
             containers={
-                identity: {"key": identity, "id": "9c1b4a77e120"},
-                legacy: {"key": legacy, "id": legacy},
+                identity: {"id": "new", "record_ids": ["old", "new"]},
             },
         )
-
-        segments = device.container_identity_segments(coordinator)
 
         self.assertEqual(
-            segments,
+            device.container_identity_map(coordinator),
             {
-                f"container:{identity}",
-                f"container:{legacy}",
-                "container:9c1b4a77e120",
+                "container:old": f"container:{identity}",
+                "container:new": f"container:{identity}",
             },
         )
+
+
+class ContainerRegistryMigrationTests(unittest.IsolatedAsyncioTestCase):
+    """Keep registry entries that cannot safely be migrated during setup."""
+
+    async def test_setup_keeps_unmatched_container_entries(self) -> None:
+        integration = importlib.import_module("custom_components.beszel")
+        namespace = "aaaaaaaaaaaa"
+        identity = "container-4f2a1c9e77b0"
+        entry = Mock(entry_id="beszel-entry")
+        coordinator = Mock(
+            namespace=namespace,
+            containers={identity: container(identity, "new-runtime-id")},
+            systems={},
+            smart_devices={},
+            async_config_entry_first_refresh=AsyncMock(),
+        )
+        existing = {
+            "sensor.recreated": f"{namespace}:container:old-runtime-id:cpu",
+            "sensor.other_hub": "bbbbbbbbbbbb:container:old-runtime-id:cpu",
+            "sensor.missing": f"{namespace}:container:container-missing:cpu",
+        }
+        registry = Mock(
+            entities={
+                entity_id: SimpleNamespace(
+                    entity_id=entity_id,
+                    config_entry_id=entry.entry_id,
+                    unique_id=unique_id,
+                )
+                for entity_id, unique_id in existing.items()
+            }
+        )
+        hass = Mock(data={})
+        hass.config_entries.async_forward_entry_setups = AsyncMock()
+
+        with (
+            patch.object(
+                integration, "BeszelDataUpdateCoordinator", return_value=coordinator
+            ),
+            patch.object(integration, "async_migrate_container_devices"),
+            patch.object(integration, "async_remove_empty_devices"),
+            patch.object(device.er, "async_get", return_value=registry),
+        ):
+            for complete in (False, True):
+                with self.subTest(complete=complete):
+                    coordinator.data = {"complete": {"containers": complete}}
+                    self.assertTrue(await integration.async_setup_entry(hass, entry))
+
+        registry.async_update_entity.assert_not_called()
+        registry.async_remove.assert_not_called()
+
+    def test_migrate_matching_entry_without_deleting_it_on_collision(self) -> None:
+        identity = "container-4f2a1c9e77b0"
+        entry = SimpleNamespace(entry_id="beszel-entry")
+        coordinator = SimpleNamespace(
+            namespace="aaaaaaaaaaaa",
+            containers={identity: container(identity, "live")},
+            systems={},
+            smart_devices={},
+        )
+        entity = SimpleNamespace(
+            entity_id="sensor.user_named_cpu",
+            config_entry_id=entry.entry_id,
+            unique_id="aaaaaaaaaaaa:container:live:cpu",
+        )
+        registry = Mock(entities={entity.entity_id: entity})
+        registry.async_get_entity_id.return_value = None
+
+        with patch.object(device.er, "async_get", return_value=registry):
+            device.async_migrate_legacy_entities(None, entry, coordinator)
+            registry.async_update_entity.assert_called_once_with(
+                entity.entity_id, new_unique_id=f"aaaaaaaaaaaa:container:{identity}:cpu"
+            )
+
+            registry.async_update_entity.reset_mock()
+            registry.async_get_entity_id.return_value = "sensor.existing_cpu"
+            registry.async_get.return_value = SimpleNamespace(
+                config_entry_id=entry.entry_id
+            )
+            device.async_migrate_legacy_entities(None, entry, coordinator)
+
+        registry.async_update_entity.assert_not_called()
+        registry.async_remove.assert_not_called()
 
 
 class ContainerInventoryMergeTests(unittest.TestCase):

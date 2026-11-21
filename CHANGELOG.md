@@ -12,8 +12,9 @@
     on the next recreate.
   - A recreate no longer registers a second entity for a container: the retired
     and the fresh record now collapse onto one identity.
-- Migrated existing container entities, devices and unique IDs to the new identity
-  on setup, keeping each entity ID and each device's area, name and labels.
+- Migrated existing container entities and devices with a matching record to the
+  new identity on setup, keeping each entity ID and each device's area, name and
+  labels. Kept registry entries whose previous IDs could not be matched.
 - Container sensors expose the stable identity as a new `key` attribute;
   `container_id` keeps reporting the current runtime container ID.
 

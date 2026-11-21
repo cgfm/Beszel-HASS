@@ -344,6 +344,9 @@ def normalize_containers(
         # the runtime container ID in would give the container a second identity,
         # a second entity and a second device on every recreate.
         previous = normalized.get(identity)
+        record_ids = previous["record_ids"] if previous else []
+        record_ids.append(record_id)
+        record["record_ids"] = record_ids
         if previous is None or _container_rank(record) > _container_rank(previous):
             normalized[identity] = record
 
