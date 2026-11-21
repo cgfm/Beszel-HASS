@@ -32,6 +32,68 @@ class HostNormalizationTests(unittest.TestCase):
                 models.normalize_host(value)
 
 
+class SystemStatusCountTests(unittest.TestCase):
+    """Service and update counters must preserve missing and zero values."""
+
+    def test_all_values(self) -> None:
+        actual = models.normalize_system_status_counts({"sv": [7, 0], "pu": [116, 21]})
+        self.assertEqual(
+            actual,
+            {
+                "services_total": 7,
+                "services_failed": 0,
+                "updates_total": 116,
+                "updates_security": 21,
+            },
+        )
+
+    def test_zero_values(self) -> None:
+        result = models.normalize_system_status_counts({"sv": [0, 0], "pu": [0, 0]})
+        self.assertEqual(result["services_total"], 0)
+        self.assertEqual(result["updates_total"], 0)
+        self.assertEqual(result["updates_security"], 0)
+
+    def test_missing_updates(self) -> None:
+        result = models.normalize_system_status_counts({"sv": [47, 0]})
+        self.assertIsNone(result["updates_total"])
+        self.assertIsNone(result["updates_security"])
+
+    def test_partial_arrays(self) -> None:
+        result = models.normalize_system_status_counts({"sv": [3], "pu": [2]})
+        self.assertEqual(result["services_total"], 3)
+        self.assertIsNone(result["services_failed"])
+        self.assertEqual(result["updates_total"], 2)
+        self.assertIsNone(result["updates_security"])
+
+    def test_absent_info(self) -> None:
+        for info in (None, {}, []):
+            with self.subTest(info=info):
+                result = models.normalize_system_status_counts(info)
+                self.assertTrue(all(value is None for value in result.values()))
+
+    def test_invalid_container_types(self) -> None:
+        result = models.normalize_system_status_counts(
+            {"sv": "invalid", "pu": {"updates": 2}}
+        )
+        self.assertTrue(all(value is None for value in result.values()))
+
+    def test_negative_values(self) -> None:
+        result = models.normalize_system_status_counts({"sv": [-1, -2], "pu": [-3, -4]})
+        self.assertTrue(all(value is None for value in result.values()))
+
+    def test_boolean_values(self) -> None:
+        result = models.normalize_system_status_counts(
+            {"sv": [True, False], "pu": [True, False]}
+        )
+        self.assertTrue(all(value is None for value in result.values()))
+
+    def test_noninteger_values(self) -> None:
+        result = models.normalize_system_status_counts(
+            {"sv": ["3", 1.5], "pu": [None, "0"]}
+        )
+        self.assertTrue(all(value is None for value in result.values()))
+
+
 class SystemNormalizationTests(unittest.TestCase):
     """Current and legacy Beszel fields must yield identical native units."""
 

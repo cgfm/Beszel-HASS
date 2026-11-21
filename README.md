@@ -77,6 +77,10 @@ Extra filesystems add usage, size, and I/O sensors
 to their corresponding system device. SMART records add health, temperature, sector
 counts, and power-on hours to that same system device.
 
+System connectivity binary sensors also provide optional service and package-update
+counts as attributes: `services_total`, `services_failed`, `updates_total`, and
+`updates_security`. Missing counts are `None`; valid zero counts remain `0`.
+
 Container devices expose:
 
 | Sensor | Native unit |
