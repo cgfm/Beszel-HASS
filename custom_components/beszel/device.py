@@ -18,6 +18,7 @@ from .const import (
     EXTRA_DISK_SENSOR_DESCRIPTIONS,
     SMART_SENSOR_DESCRIPTIONS,
     SYSTEM_SENSOR_DESCRIPTIONS,
+    TEMPERATURE_SENSOR_DESCRIPTIONS,
 )
 from .coordinator import BeszelDataUpdateCoordinator
 
@@ -276,6 +277,16 @@ def async_migrate_legacy_entities(
         expected.update(
             entity_unique_id(
                 coordinator,
+                "temperature",
+                f"{system_id}:{sensor_name}",
+                description.key,
+            )
+            for sensor_name in system.get("temperatures", {})
+            for description in TEMPERATURE_SENSOR_DESCRIPTIONS
+        )
+        expected.update(
+            entity_unique_id(
+                coordinator,
                 "filesystem",
                 f"{system_id}:{filesystem}",
                 description.key,
@@ -309,7 +320,7 @@ def async_migrate_legacy_entities(
             and namespace != coordinator.namespace
             and len(namespace) == 12
             and all(char in "0123456789abcdef" for char in namespace)
-            and kind in {"system", "filesystem", "container", "smart"}
+            and kind in {"system", "filesystem", "container", "smart", "temperature"}
         ):
             candidate = f"{coordinator.namespace}:{suffix}"
             if candidate in expected:
@@ -322,7 +333,7 @@ def async_migrate_legacy_entities(
                 )
                 if replacement is not None and replacement in expected:
                     new_unique_id = replacement
-                elif kind != "container":
+                elif kind not in {"container", "temperature"}:
                     registry.async_remove(entity.entity_id)
                     continue
         if new_unique_id is None or new_unique_id == entity.unique_id:

@@ -164,6 +164,44 @@ def normalize_extra_filesystems(stats: dict[str, Any]) -> dict[str, dict[str, An
     return normalized
 
 
+def normalize_temperatures(stats: dict[str, Any]) -> dict[str, float]:
+    """Normalize the per-sensor temperatures reported by the Beszel agent."""
+    temperatures: dict[str, float] = {}
+    raw = stats.get("t")
+    if not isinstance(raw, dict):
+        return temperatures
+    for name, value in raw.items():
+        if not isinstance(name, str):
+            continue
+        number = _number(value)
+        if number is None:
+            continue
+        rounded = _rounded(number, 1)
+        if rounded is not None:
+            temperatures[name] = float(rounded)
+    return temperatures
+
+
+def normalize_system_status_counts(info: Any) -> dict[str, int | None]:
+    """Normalize optional service and package-update counts from Beszel."""
+    if not isinstance(info, dict):
+        info = {}
+
+    def count(field: str, index: int) -> int | None:
+        values = info.get(field)
+        if not isinstance(values, list) or len(values) <= index:
+            return None
+        value = values[index]
+        return value if type(value) is int and value >= 0 else None
+
+    return {
+        "services_total": count("sv", 0),
+        "services_failed": count("sv", 1),
+        "updates_total": count("pu", 0),
+        "updates_security": count("pu", 1),
+    }
+
+
 def normalize_system(
     system: dict[str, Any],
     stats: dict[str, Any],
@@ -253,6 +291,7 @@ def normalize_system(
         "agent_version": info.get("v"),
         "metrics": metrics,
         "filesystems": normalize_extra_filesystems(stats),
+        "temperatures": normalize_temperatures(stats),
         "raw_info": info,
         "raw_stats": stats,
         "raw_details": details,

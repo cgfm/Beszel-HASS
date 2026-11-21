@@ -17,6 +17,7 @@ from .const import (
     SMART_SENSOR_DESCRIPTIONS,
     STALE_UPDATE_LIMIT,
     SYSTEM_SENSOR_DESCRIPTIONS,
+    TEMPERATURE_SENSOR_DESCRIPTIONS,
 )
 from .coordinator import BeszelDataUpdateCoordinator
 from .device import (
@@ -54,7 +55,7 @@ class BeszelSensorManager:
         self._coordinator = coordinator
         self._async_add_entities = async_add_entities
         self._targets: dict[str, list[SensorEntity]] = {}
-        self._filesystem_misses: dict[str, int] = {}
+        self._discovery_misses: dict[str, int] = {}
 
     @callback
     def async_update_entities(self) -> None:
@@ -76,7 +77,7 @@ class BeszelSensorManager:
             for filesystem in system.get("filesystems", {}):
                 target = f"filesystem:{system_id}:{filesystem}"
                 current.add(target)
-                self._filesystem_misses.pop(target, None)
+                self._discovery_misses.pop(target, None)
                 if target in self._targets:
                     continue
                 entities = [
@@ -87,6 +88,24 @@ class BeszelSensorManager:
                         description,
                     )
                     for description in EXTRA_DISK_SENSOR_DESCRIPTIONS
+                ]
+                self._targets[target] = entities
+                new_entities.extend(entities)
+
+            for sensor_name in system.get("temperatures", {}):
+                target = f"temperature:{system_id}:{sensor_name}"
+                current.add(target)
+                self._discovery_misses.pop(target, None)
+                if target in self._targets:
+                    continue
+                entities = [
+                    BeszelTemperatureSensor(
+                        self._coordinator,
+                        system_id,
+                        sensor_name,
+                        description,
+                    )
+                    for description in TEMPERATURE_SENSOR_DESCRIPTIONS
                 ]
                 self._targets[target] = entities
                 new_entities.extend(entities)
@@ -120,26 +139,26 @@ class BeszelSensorManager:
 
         device_candidates: set[tuple[str, str]] = set()
         for target in set(self._targets) - current:
-            if target.startswith("filesystem:"):
+            if target.startswith(("filesystem:", "temperature:")):
                 parent_id = target.split(":", 2)[1]
                 complete = self._coordinator.data.get("complete", {})
                 if parent_id in self._coordinator.systems and not complete.get(
                     "system_stats", False
                 ):
                     continue
-                self._filesystem_misses[target] = (
-                    self._filesystem_misses.get(target, 0) + 1
+                self._discovery_misses[target] = (
+                    self._discovery_misses.get(target, 0) + 1
                 )
                 if (
                     parent_id in self._coordinator.systems
-                    and self._filesystem_misses[target] < STALE_UPDATE_LIMIT
+                    and self._discovery_misses[target] < STALE_UPDATE_LIMIT
                 ):
                     continue
-                self._filesystem_misses.pop(target, None)
+                self._discovery_misses.pop(target, None)
             for entity in self._targets.pop(target):
                 async_remove_entity(self._hass, "sensor", entity)
             kind, record_id = target.split(":", 1)
-            if kind == "filesystem":
+            if kind in ("filesystem", "temperature"):
                 parent_id = record_id.split(":", 1)[0]
                 if parent_id not in self._coordinator.systems:
                     device_candidates.add(("system", parent_id))
@@ -261,6 +280,58 @@ class BeszelFilesystemSensor(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"system_id": self._system_id, "filesystem": self._filesystem}
+
+
+class BeszelTemperatureSensor(
+    CoordinatorEntity[BeszelDataUpdateCoordinator], SensorEntity
+):
+    """One temperature sensor reported by the Beszel agent."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: BeszelDataUpdateCoordinator,
+        system_id: str,
+        sensor_name: str,
+        description: SensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._system_id = system_id
+        self._sensor_name = sensor_name
+        self._attr_translation_placeholders = {"sensor": sensor_name}
+        self._attr_unique_id = entity_unique_id(
+            coordinator,
+            "temperature",
+            f"{system_id}:{sensor_name}",
+            description.key,
+        )
+        self._attr_device_info = system_device_info(
+            coordinator, coordinator.systems[system_id]
+        )
+
+    @property
+    def native_value(self) -> Any:
+        system = self.coordinator.get_system_data(self._system_id)
+        if not system:
+            return None
+        return system.get("temperatures", {}).get(self._sensor_name)
+
+    @property
+    def available(self) -> bool:
+        system = self.coordinator.get_system_data(self._system_id)
+        return bool(
+            self.coordinator.last_update_success
+            and system
+            and not system.get("stale")
+            and system.get("status") == "up"
+            and self.native_value is not None
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"system_id": self._system_id, "sensor": self._sensor_name}
 
 
 class BeszelContainerSensor(

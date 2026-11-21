@@ -253,5 +253,42 @@ class ContainerInventoryMergeTests(unittest.TestCase):
         self.assertEqual(merged, {})
 
 
+class TemperatureMigrationTests(unittest.TestCase):
+    """Individual temperature sensors keep their identity on endpoint changes."""
+
+    def test_migrate_observed_sensor_and_keep_unobserved_sensor(self) -> None:
+        old_coordinator = SimpleNamespace(namespace="aaaaaaaaaaaa")
+        coordinator = SimpleNamespace(
+            namespace="bbbbbbbbbbbb",
+            systems={"pc-1": {"temperatures": {"cpu:package": 42.0}}},
+            containers={},
+            smart_devices={},
+        )
+        entry = SimpleNamespace(entry_id="beszel-entry")
+        entities = {}
+        for name, entity_id in (
+            ("cpu:package", "sensor.user_named_cpu"),
+            ("gpu", "sensor.user_named_gpu"),
+        ):
+            entities[entity_id] = SimpleNamespace(
+                entity_id=entity_id,
+                config_entry_id=entry.entry_id,
+                unique_id=device.entity_unique_id(
+                    old_coordinator, "temperature", f"pc-1:{name}", "value"
+                ),
+            )
+        registry = Mock(entities=entities)
+        registry.async_get_entity_id.return_value = None
+
+        with patch.object(device.er, "async_get", return_value=registry):
+            device.async_migrate_legacy_entities(None, entry, coordinator)
+
+        registry.async_update_entity.assert_called_once_with(
+            "sensor.user_named_cpu",
+            new_unique_id="bbbbbbbbbbbb:temperature:pc-1:cpu:package:value",
+        )
+        registry.async_remove.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

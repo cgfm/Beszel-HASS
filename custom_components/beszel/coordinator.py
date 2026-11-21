@@ -17,12 +17,14 @@ from .api import BeszelAPIClient, BeszelAPIError, BeszelAuthError
 from .const import (
     CONF_HOST,
     CONF_INCLUDE_DOCKER,
+    CONF_INCLUDE_TEMPERATURE_SENSORS,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SSL,
     CONF_USERNAME,
     DEFAULT_INCLUDE_DOCKER,
+    DEFAULT_INCLUDE_TEMPERATURE_SENSORS,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SSL,
     DOMAIN,
@@ -41,6 +43,9 @@ class BeszelDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
         self.entry = entry
         self.include_docker = entry.data.get(
             CONF_INCLUDE_DOCKER, DEFAULT_INCLUDE_DOCKER
+        )
+        self.include_temperature_sensors = entry.data.get(
+            CONF_INCLUDE_TEMPERATURE_SENSORS, DEFAULT_INCLUDE_TEMPERATURE_SENSORS
         )
         self.api = BeszelAPIClient(
             session=async_get_clientsession(hass),
@@ -97,6 +102,8 @@ class BeszelDataUpdateCoordinator(DataUpdateCoordinator[CoordinatorData]):
                 old_details = old.get("raw_details")
                 details = old_details if isinstance(old_details, dict) else {}
             normalized = normalize_system(record, stats or {}, details or {})
+            if not self.include_temperature_sensors:
+                normalized.pop("temperatures", None)
             systems[system_id] = normalized
             system_names[system_id] = normalized["name"]
 

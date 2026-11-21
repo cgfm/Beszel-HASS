@@ -11,6 +11,7 @@
           "username": "E-Mail-Adresse oder Benutzername",
           "password": "Passwort",
           "include_docker": "Container überwachen",
+          "include_temperature_sensors": "Einzelne Temperatursensoren überwachen",
           "scan_interval": "Aktualisierungsintervall (Sekunden)"
         },
         "data_description": {
@@ -50,6 +51,7 @@
           "username": "E-Mail-Adresse oder Benutzername",
           "password": "Passwort",
           "include_docker": "Container überwachen",
+          "include_temperature_sensors": "Einzelne Temperatursensoren überwachen",
           "scan_interval": "Aktualisierungsintervall (Sekunden)"
         },
         "data_description": {
@@ -71,6 +73,7 @@
       "cpu_usage": { "name": "CPU-Auslastung" },
       "cpu_cores": { "name": "CPU-Kerne" },
       "temperature": { "name": "Temperatur" },
+      "temperature_sensor": { "name": "{sensor}" },
       "memory_usage": { "name": "Arbeitsspeicherauslastung" },
       "disk_usage": { "name": "Datenträgerauslastung" },
       "disk_total": { "name": "Datenträger gesamt" },
