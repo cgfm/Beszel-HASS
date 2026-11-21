@@ -11,6 +11,7 @@
           "username": "Email or username",
           "password": "Password",
           "include_docker": "Monitor containers",
+          "include_temperature_sensors": "Monitor individual temperature sensors",
           "scan_interval": "Update interval (seconds)"
         },
         "data_description": {
@@ -50,6 +51,7 @@
           "username": "Email or username",
           "password": "Password",
           "include_docker": "Monitor containers",
+          "include_temperature_sensors": "Monitor individual temperature sensors",
           "scan_interval": "Update interval (seconds)"
         },
         "data_description": {
@@ -71,6 +73,7 @@
       "cpu_usage": { "name": "CPU usage" },
       "cpu_cores": { "name": "CPU cores" },
       "temperature": { "name": "Temperature" },
+      "temperature_sensor": { "name": "{sensor}" },
       "memory_usage": { "name": "Memory usage" },
       "disk_usage": { "name": "Disk usage" },
       "disk_total": { "name": "Disk total" },

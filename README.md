@@ -11,7 +11,7 @@ disks from a [Beszel](https://github.com/henrygd/beszel) Hub in Home Assistant.
 ## Highlights
 
 - Local polling through Beszel's PocketBase API
-- Automatic discovery of new systems, containers, filesystems, and SMART disks
+- Automatic discovery of new systems, containers, filesystems, SMART disks, and temperature sensors
 - Current and legacy Beszel metric formats normalized to correct Home Assistant units
 - Real container running state on current Beszel versions
 - Pagination for installations with more than one PocketBase page of records
@@ -56,6 +56,7 @@ Go to **Settings → Devices & services → Add integration → Beszel**.
 | Use HTTPS | Connect using TLS | Off |
 | Email or username / password | Beszel user credentials | — |
 | Monitor containers | Discover Docker and Podman containers | On |
+| Monitor temperature sensors | Add one sensor per temperature source reported by the agent (CPU, GPU, NVMe, …) | Off |
 | Update interval | Polling interval in seconds (`10`–`3600`) | `30` |
 
 The exact same HTTPS/host/port endpoint can only be configured once. Different
@@ -66,7 +67,13 @@ match.
 
 System devices expose CPU, memory, disk, load, GPU, battery, temperature, uptime,
 bandwidth, disk I/O, network I/O, memory/swap sizes, IP address, and connectivity
-where Beszel supplies the value. Extra filesystems add usage, size, and I/O sensors
+where Beszel supplies the value. With **Monitor temperature sensors** enabled, every
+entry of the agent's `stats.t` map becomes its own temperature sensor on the system
+device, so CPU, GPU, NVMe, and board sensors stay distinguishable instead of being
+collapsed into the single dashboard value. The option is off by default because
+agents can report dozens of sources (Apple SMC alone reports 30–40).
+
+Extra filesystems add usage, size, and I/O sensors
 to their corresponding system device. SMART records add health, temperature, sector
 counts, and power-on hours to that same system device.
 
