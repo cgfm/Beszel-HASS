@@ -19,6 +19,8 @@ disks from a [Beszel](https://github.com/henrygd/beszel) Hub in Home Assistant.
 - Configurable update interval from 10 to 3600 seconds
 - English and German config-flow and entity translations
 - Stable, hub-scoped entity and device identifiers
+- Container identity that survives a recreated container, so an updated or
+  redeployed container keeps its entities, its device and its long-term statistics
 
 ## Requirements
 

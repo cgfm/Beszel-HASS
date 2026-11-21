@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -23,6 +23,14 @@ from .const import (
 from .coordinator import BeszelDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+CONTAINER_METRIC_KEYS: Final = (
+    "cpu",
+    "memory",
+    "network_sent",
+    "network_received",
+    "status",
+)
 
 
 def entity_unique_id(
@@ -110,11 +118,17 @@ def system_device_info(
 
 
 def container_device_info(
-    coordinator: BeszelDataUpdateCoordinator, container: dict[str, Any]
+    coordinator: BeszelDataUpdateCoordinator,
+    identity: str,
+    container: dict[str, Any],
 ) -> DeviceInfo:
-    """Build device info for a Docker or Podman container."""
+    """Build device info for a Docker or Podman container.
+
+    The device is identified by the container's stable identity, not by the runtime
+    container ID a recreate replaces.
+    """
     return DeviceInfo(
-        identifiers={device_identifier(coordinator, "container", container["id"])},
+        identifiers={device_identifier(coordinator, "container", identity)},
         name=f"{container['name']} ({container['system_name']})",
         manufacturer="Beszel",
         model="Container",
@@ -132,17 +146,42 @@ def smart_device_info(
     )
 
 
+def container_identity_map(
+    coordinator: BeszelDataUpdateCoordinator,
+) -> dict[str, str]:
+    """Map superseded container ID segments onto their stable identities.
+
+    Keys and values are the ``container:<id>`` segment of a unique ID, so the same
+    mapping repairs entities scoped to the current Hub namespace and ones left on a
+    previous one. An already-migrated container maps to itself and is left out.
+    """
+    identities: dict[str, str] = {}
+    for identity, container in coordinator.containers.items():
+        for record_id in container.get("record_ids", (container.get("id"),)):
+            if not isinstance(record_id, str) or not record_id or record_id == identity:
+                continue
+            identities[f"container:{record_id}"] = f"container:{identity}"
+    return identities
+
+
 @callback
 def async_migrate_legacy_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
     coordinator: BeszelDataUpdateCoordinator,
 ) -> None:
-    """Migrate v1.1 unique IDs and remove the invalid disk-temperature entity."""
+    """Migrate superseded unique IDs and remove the invalid disk-temperature entity.
+
+    Container entities also move off the runtime container ID, which a recreate
+    replaces, onto their stable identity, so a replaced container keeps its entity,
+    its device and its long-term statistics. Retain container entries with no
+    confirmed match in the first snapshot.
+    """
     registry = er.async_get(hass)
     mappings: dict[str, str] = {}
     obsolete: set[str] = set()
     expected: set[str] = set()
+    identities = container_identity_map(coordinator)
 
     system_metric_map = {
         "cpu": "cpu",
@@ -192,23 +231,26 @@ def async_migrate_legacy_entities(
                 mappings[f"{system_id}_efs_{filesystem}_{metric}_v1"] = new_unique_id
                 expected.add(new_unique_id)
 
-    for container_id, container in coordinator.containers.items():
+    for identity, container in coordinator.containers.items():
+        record_id = container.get("id")
         legacy_ids = {
-            container_id,
+            record_id if isinstance(record_id, str) and record_id else identity,
             f"{container['system_name']}_{container['name']}",
         }
         for legacy_id in legacy_ids:
-            for metric in ("cpu", "memory", "network_sent", "network_received"):
+            for metric in CONTAINER_METRIC_KEYS:
                 new_unique_id = entity_unique_id(
-                    coordinator, "container", container_id, metric
+                    coordinator, "container", identity, metric
                 )
                 mappings[f"docker_{legacy_id}_{metric}_v4"] = new_unique_id
                 expected.add(new_unique_id)
-            status_unique_id = entity_unique_id(
-                coordinator, "container", container_id, "status"
+
+    # v1.2 scoped container unique IDs to the runtime container ID of the Hub poll.
+    for old_segment, new_segment in identities.items():
+        for metric in CONTAINER_METRIC_KEYS:
+            mappings[f"{coordinator.namespace}:{old_segment}:{metric}"] = (
+                f"{coordinator.namespace}:{new_segment}:{metric}"
             )
-            mappings[f"docker_{legacy_id}_status_v4"] = status_unique_id
-            expected.add(status_unique_id)
 
     for disk_id, disk in coordinator.smart_devices.items():
         for metric in (
@@ -283,16 +325,28 @@ def async_migrate_legacy_entities(
             candidate = f"{coordinator.namespace}:{suffix}"
             if candidate in expected:
                 new_unique_id = candidate
-            elif kind != "temperature":
-                registry.async_remove(entity.entity_id)
-                continue
+            else:
+                segment, _, metric = suffix.rpartition(":")
+                identity = identities.get(segment)
+                replacement = (
+                    f"{coordinator.namespace}:{identity}:{metric}" if identity else None
+                )
+                if replacement is not None and replacement in expected:
+                    new_unique_id = replacement
+                elif kind not in {"container", "temperature"}:
+                    registry.async_remove(entity.entity_id)
+                    continue
         if new_unique_id is None or new_unique_id == entity.unique_id:
             continue
         platform = entity.entity_id.split(".", 1)[0]
         existing = registry.async_get_entity_id(platform, DOMAIN, new_unique_id)
         if existing and existing != entity.entity_id:
             existing_entry = registry.async_get(existing)
-            if existing_entry and existing_entry.config_entry_id == entry.entry_id:
+            if (
+                existing_entry
+                and existing_entry.config_entry_id == entry.entry_id
+                and new_unique_id.split(":", 2)[1] != "container"
+            ):
                 registry.async_remove(entity.entity_id)
                 continue
             _LOGGER.warning(
@@ -302,6 +356,57 @@ def async_migrate_legacy_entities(
             )
             continue
         registry.async_update_entity(entity.entity_id, new_unique_id=new_unique_id)
+
+
+@callback
+def async_migrate_container_devices(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    coordinator: BeszelDataUpdateCoordinator,
+) -> None:
+    """Re-point container devices at their stable identity.
+
+    The device is reached through the entity that already lives on it. Its stored
+    identifier holds the runtime container ID the Hub reported when the device was
+    created, which every later recreate replaces, so looking the device up by that
+    ID misses every container that has been replaced since. Registering the
+    identity as a new identifier instead would create a second device and drop the
+    first one's area, name and labels.
+    """
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    identities = container_identity_map(coordinator)
+    if not identities:
+        return
+
+    # Entity unique IDs were just migrated, so the prefix identifies the container.
+    wanted: dict[str, str] = {}
+    for segment in identities.values():
+        identity = segment.partition(":")[2]
+        wanted[f"{coordinator.namespace}:container:{identity}"] = identity
+    taken = {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for identifier in device.identifiers
+    }
+
+    for registry_entry in list(entity_registry.entities.values()):
+        if registry_entry.config_entry_id != entry.entry_id:
+            continue
+        if not registry_entry.unique_id or not registry_entry.device_id:
+            continue
+        prefix, separator, _ = registry_entry.unique_id.rpartition(":")
+        identity = wanted.get(prefix) if separator else None
+        if identity is None:
+            continue
+        stable = device_identifier(coordinator, "container", identity)
+        if stable in taken:
+            continue
+        device = device_registry.async_get(registry_entry.device_id)
+        if device is None or device.identifiers == {stable}:
+            continue
+        device_registry.async_update_device(device.id, new_identifiers={stable})
+        taken.add(stable)
 
 
 @callback

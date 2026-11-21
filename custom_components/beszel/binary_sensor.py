@@ -159,7 +159,9 @@ class BeszelContainerBinarySensor(
             coordinator, "container", container_id, "status"
         )
         self._attr_device_info = container_device_info(
-            coordinator, coordinator.containers[container_id]
+            coordinator,
+            container_id,
+            coordinator.containers[container_id],
         )
 
     @property
@@ -190,7 +192,8 @@ class BeszelContainerBinarySensor(
         if not container:
             return None
         return {
-            "container_id": self._container_id,
+            "container_id": container.get("id"),
+            "key": container.get("key"),
             "system_id": container.get("system_id"),
             "status": container.get("status"),
             "health": container.get("health"),
