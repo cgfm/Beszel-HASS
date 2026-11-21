@@ -23,6 +23,7 @@ from .device import (
     entity_unique_id,
     system_device_info,
 )
+from .models import normalize_system_status_counts
 
 SYSTEM_STATUS_DESCRIPTION = BinarySensorEntityDescription(
     key="status",
@@ -137,6 +138,7 @@ class BeszelSystemBinarySensor(
             "port": system.get("port"),
             "status": system.get("status"),
             "last_updated": system.get("updated"),
+            **normalize_system_status_counts(system.get("raw_info")),
         }
 
 
